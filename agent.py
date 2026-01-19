@@ -117,9 +117,9 @@ class DeepSeekMCPAgent:
         self.md_file = None
         self.jsonl_handle = None
 
-    CONTEXT_CHAR_LIMIT = 100000
+    CONTEXT_CHAR_LIMIT = 1000000
     CONTEXT_KEEP_LAST_MESSAGES = 10
-    MAX_TOOL_ITERATIONS = 100
+    MAX_TOOL_ITERATIONS = 1000
     SUMMARY_MODEL = "deepseek-chat"
 
     def _start_logging(self):
