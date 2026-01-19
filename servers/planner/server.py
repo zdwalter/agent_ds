@@ -83,14 +83,14 @@ Phase 1: {phases[0]}
 - [Captured from user request]
 
 ## Research Findings
-- 
+-
 
 ## Technical Decisions
 | Decision | Rationale |
 |----------|-----------|
 
 ## Resources
-- 
+-
 """
 
     # 3. progress.md

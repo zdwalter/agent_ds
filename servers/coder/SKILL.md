@@ -98,4 +98,3 @@ To edit files efficiently and correctly using `apply_edit_blocks`, follow this d
      "edits": "<<<<<<< SEARCH\n    if x > 0:\n        print(\"Positive\")\n        return True\n=======\n    if x > 0:\n        print(\"Found positive value\")\n        return True\n>>>>>>> REPLACE"
    }
    ```
-

@@ -64,5 +64,3 @@ Quickly erase existing plans in `artifacts/cache` by deleting the three planning
 3. **Log Discoveries**: Don't rely on conversation history for long-term facts. Use `add_finding` to record important URLs, file paths, or architectural decisions.
 4. **Transition Phases**: When a phase is done, explicitly use `update_plan_status` to mark it as `completed` and the next one as `in_progress`.
 5. **Resume Smart**: If you see existing plan files, prefer `resume_last_run` over starting from scratch.
-
-

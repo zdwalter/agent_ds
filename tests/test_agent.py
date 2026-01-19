@@ -21,7 +21,8 @@ class TestMCPSkillWrapper:
     def test_init_with_skill_md(self, tmp_path):
         """Test initialization with a SKILL.md file"""
         skill_md = tmp_path / "SKILL.md"
-        skill_md.write_text("""---
+        skill_md.write_text(
+            """---
 name: test_skill
 description: Test skill description
 allowed-tools:
@@ -30,7 +31,8 @@ allowed-tools:
 ---
 # Test Skill
 This is a test skill.
-""")
+"""
+        )
 
         config = MCPSkillConfig(
             name="test_skill", command="echo", args=["test"], skill_md_path=skill_md
@@ -57,13 +59,15 @@ This is a test skill.
     def test_get_loader_tool_def(self, tmp_path):
         """Test generation of loader tool definition"""
         skill_md = tmp_path / "SKILL.md"
-        skill_md.write_text("""---
+        skill_md.write_text(
+            """---
 name: test_skill
 description: Test skill description
 ---
 # Test Skill
 This is a test skill.
-""")
+"""
+        )
 
         config = MCPSkillConfig(
             name="test_skill", command="echo", args=["test"], skill_md_path=skill_md

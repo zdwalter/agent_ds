@@ -113,11 +113,11 @@ async def run_task():
             return
 
         agent = DeepSeekMCPAgent(api_key=api_key)
-        
+
         # Load requested skills
         servers_dir = Path("{root_dir}") / "servers"
         requested_skills = {json.dumps(skills_needed)}
-        
+
         for skill_name in requested_skills:
             skill_dir = servers_dir / skill_name
             if skill_dir.exists():
@@ -131,66 +131,66 @@ async def run_task():
         # We need to modify the agent to NOT use console.input loop but just run once.
         # But `agent.chat_loop` is an infinite loop.
         # We will bypass chat_loop and use internal methods directly.
-        
+
         # 1. Start logging
         agent._start_logging()
-        
+
         # 2. Add System Prompt (Simplified from agent.py)
         # We need to manually trigger skill loading if needed.
         # For this headless sub-agent, we can pre-load all requested skills.
-        
+
         # Pre-connect to skills to ensure tools are available immediately
         # (This differs from the lazy loading in main agent, but helpful for headless)
         # However, the agent logic `call_tool` handles connection.
-        
+
         # Construct messages
         sys_prompt = "You are a sub-agent delegated to perform a specific task. Do not ask for user input. Perform the task and then exit."
         agent.messages.append({{"role": "system", "content": sys_prompt}})
         agent.messages.append({{"role": "user", "content": '''{task_description}'''}})
-        
+
         iteration = 0
         max_iter = 30
-        
+
         final_result = ""
-        
+
         while iteration < max_iter:
             # Condense context if needed
             await agent._condense_context()
-            
+
             # Get tools
             tools = await agent.list_tools()
-            
+
             # Call LLM
             # We need to capture the output to return it
             full_content = await agent.send_llm_request(
-                 prompt="", # Prompt is already in history? No, send_llm_request is one-off. 
+                 prompt="", # Prompt is already in history? No, send_llm_request is one-off.
                  # We can't use send_llm_request easily because it doesn't update history.
                  # We have to replicate the loop logic from chat_loop but without rich console input.
             )
-            
+
             # RE-IMPLEMENTING BASIC LOOP FOR HEADLESS EXECUTION
             # This is tricky because we want to reuse the agent logic.
             # Best approach: Use the client directly with history.
-            
+
             response = agent.client.chat.completions.create(
                 model="deepseek-reasoner",
                 messages=agent.messages,
                 tools=tools if tools else None,
                 stream=False # No streaming for headless runner
             )
-            
+
             msg = response.choices[0].message
             content = msg.content
-            
+
             # Handle tool calls
             if msg.tool_calls:
                 agent.messages.append(msg) # Add assistant msg with tool calls
-                
+
                 for tc in msg.tool_calls:
                     fn_name = tc.function.name
                     args = json.loads(tc.function.arguments)
                     result = await agent.call_tool(fn_name, args)
-                    
+
                     agent.messages.append({{
                         "role": "tool",
                         "tool_call_id": tc.id,
@@ -201,13 +201,13 @@ async def run_task():
                 # We assume if no tool calls, it's the final answer.
                 final_result = content
                 break
-            
+
             iteration += 1
 
         print("TASK_RESULT_START")
         print(final_result)
         print("TASK_RESULT_END")
-        
+
         await agent.cleanup()
 
     except Exception as e:

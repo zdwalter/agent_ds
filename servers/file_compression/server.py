@@ -1,9 +1,9 @@
-import os
-import zipfile
-import tarfile
-import gzip
 import bz2
+import gzip
+import os
 import shutil
+import tarfile
+import zipfile
 from pathlib import Path
 from typing import List
 
