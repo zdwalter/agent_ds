@@ -201,8 +201,8 @@ class TestDeepSeekMCPAgent:
         assert agent.skills[0].config.command == "python"
         assert agent.skills[0].config.args == ["-c", "print('hello')"]
 
-    @pytest.mark.skip(reason="Mocking async context managers is complex, will revisit")
     @pytest.mark.asyncio
+    @pytest.mark.skip(reason="Mock complexity needs further investigation")
     async def test_connect_server_success(self):
         """Test successful connection to a skill server"""
         # Create mock objects
@@ -218,11 +218,11 @@ class TestDeepSeekMCPAgent:
         # Mock ClientSession to return our mock session
         mock_client_session = patch("agent.ClientSession", return_value=mock_session)
         # Mock exit_stack.enter_async_context to return the appropriate values
-        mock_exit_stack = MagicMock()
+        mock_exit_stack = AsyncMock()
         # First call yields read/write tuple, second yields session
         mock_exit_stack.enter_async_context.side_effect = [
-            mock_read_write,
-            mock_session,
+            AsyncMock(return_value=mock_read_write),
+            AsyncMock(return_value=mock_session),
         ]
 
         with mock_stdio_client as stdio_mock, mock_client_session as client_mock:
@@ -314,6 +314,29 @@ class TestDeepSeekMCPAgent:
         mock_session.call_tool.side_effect = RuntimeError("Tool error")
         result = await agent.call_tool("some_tool", {})
         assert "Error executing some_tool" in result
+
+    @pytest.mark.asyncio
+    async def test_send_llm_request(self):
+        """Test sending LLM request."""
+        from unittest.mock import MagicMock, patch
+
+        # Create a mock chunk
+        mock_chunk = MagicMock()
+        mock_chunk.choices = [MagicMock()]
+        mock_chunk.choices[0].delta = MagicMock()
+        mock_chunk.choices[0].delta.content = "Hello"
+        mock_chunk.choices[0].delta.reasoning_content = None
+
+        with patch("agent.OpenAI") as mock_openai_class:
+            mock_client = MagicMock()
+            mock_openai_class.return_value = mock_client
+            # create returns a sync iterable (list)
+            mock_client.chat.completions.create.return_value = [mock_chunk]
+
+            agent = DeepSeekMCPAgent("fake-api-key")
+            response = await agent.send_llm_request("test prompt")
+            assert response == "Hello"
+            mock_client.chat.completions.create.assert_called_once()
 
 
 if __name__ == "__main__":
