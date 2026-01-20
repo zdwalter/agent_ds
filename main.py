@@ -1,3 +1,4 @@
+import argparse
 import asyncio
 import sys
 from pathlib import Path
@@ -34,6 +35,29 @@ def get_api_key() -> str:
 
 async def main():
     load_dotenv()
+    import sys
+
+    # Parse command line arguments
+    parser = argparse.ArgumentParser(
+        description="DeepSeek MCP Agent with command line support."
+    )
+    parser.add_argument(
+        "-c", "--command", type=str, help="Execute a single command and exit."
+    )
+    parser.add_argument(
+        "-i", "--stdin", action="store_true", help="Read command from standard input."
+    )
+    args = parser.parse_args()
+
+    # Determine user input
+    user_input = None
+    if args.stdin:
+        # Read from stdin
+        import sys
+
+        user_input = sys.stdin.read().strip()
+    elif args.command:
+        user_input = args.command.strip()
 
     # 1. Setup Agent
     api_key = get_api_key()
@@ -59,11 +83,34 @@ async def main():
                         args=[str(server_path)],
                     )
 
-    # 3. Start Chat Loop
-    try:
-        await agent.chat_loop()
-    except KeyboardInterrupt:
-        pass
+    # 3. Decide mode
+    if user_input is None:
+        # Interactive mode
+        try:
+            await agent.chat_loop()
+        except KeyboardInterrupt:
+            pass
+    else:
+        # Command mode: execute the command using coder skill
+        # Ensure coder skill is loaded
+        coder_loaded = False
+        for skill in agent.skills:
+            if skill.config.name == "coder":
+                if not skill.loaded:
+                    # Load coder skill
+                    await agent.call_tool("skill_coder", {})
+                coder_loaded = True
+                break
+
+        if not coder_loaded:
+            print("Error: coder skill not found. Cannot execute command.")
+            sys.exit(1)
+
+        # Execute the command via run_terminal_command
+        result = await agent.call_tool("run_terminal_command", {"command": user_input})
+        print(result)
+        # Cleanup
+        await agent.cleanup()
 
 
 if __name__ == "__main__":
