@@ -1,18 +1,22 @@
-from mcp.server.fastmcp import FastMCP
+import json
 import sqlite3
 import uuid
-import json
+from typing import Any, Dict, Optional
+
+from mcp.server.fastmcp import FastMCP
 
 mcp = FastMCP("database", log_level="ERROR")
 
 # In-memory store for database connections
-_connections = {}
+_connections: Dict[str, Any] = {}
+
 
 def _get_connection(connection_id: str):
     """Retrieve a connection by ID, raise error if not found."""
     if connection_id not in _connections:
         raise ValueError(f"Connection {connection_id} not found.")
     return _connections[connection_id]
+
 
 @mcp.tool()
 def connect_sqlite(db_path: str) -> str:
@@ -29,14 +33,17 @@ def connect_sqlite(db_path: str) -> str:
         _connections[connection_id] = {
             "conn": conn,
             "cursor": None,
-            "last_result": None
+            "last_result": None,
         }
-        return f"Connected to SQLite database at {db_path}. Connection ID: {connection_id}"
+        return (
+            f"Connected to SQLite database at {db_path}. Connection ID: {connection_id}"
+        )
     except Exception as e:
         return f"Error connecting to database: {e}"
 
+
 @mcp.tool()
-def execute_sql(connection_id: str, sql: str, parameters: str = None) -> str:
+def execute_sql(connection_id: str, sql: str, parameters: Optional[str] = None) -> str:
     """
     Execute a SQL statement (SELECT, INSERT, UPDATE, DELETE, etc.).
 
@@ -78,6 +85,7 @@ def execute_sql(connection_id: str, sql: str, parameters: str = None) -> str:
     except Exception as e:
         return f"Error executing SQL: {e}"
 
+
 @mcp.tool()
 def fetch_rows(connection_id: str, limit: int = 100) -> str:
     """
@@ -104,6 +112,7 @@ def fetch_rows(connection_id: str, limit: int = 100) -> str:
     except Exception as e:
         return f"Error fetching rows: {e}"
 
+
 @mcp.tool()
 def create_table(connection_id: str, table_name: str, columns: list) -> str:
     """
@@ -120,6 +129,7 @@ def create_table(connection_id: str, table_name: str, columns: list) -> str:
     sql = f"CREATE TABLE IF NOT EXISTS {table_name} ({columns_sql})"
     return execute_sql(connection_id, sql)
 
+
 @mcp.tool()
 def list_tables(connection_id: str) -> str:
     """
@@ -134,6 +144,7 @@ def list_tables(connection_id: str) -> str:
         return result
     # fetch rows
     return fetch_rows(connection_id, limit=100)
+
 
 @mcp.tool()
 def disconnect(connection_id: str) -> str:
@@ -150,6 +161,7 @@ def disconnect(connection_id: str) -> str:
         return f"Connection {connection_id} closed."
     except Exception as e:
         return f"Error disconnecting: {e}"
+
 
 if __name__ == "__main__":
     mcp.run()

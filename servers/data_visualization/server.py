@@ -1,13 +1,16 @@
-from mcp.server.fastmcp import FastMCP
-import matplotlib.pyplot as plt
-import pandas as pd
-import numpy as np
 import os
+from typing import Optional
+
+import matplotlib.pyplot as plt
+import numpy as np
+import pandas as pd
+from mcp.server.fastmcp import FastMCP
 
 mcp = FastMCP("data_visualization", log_level="ERROR")
 
 # Store the current figure globally (simple approach)
 _current_fig = None
+
 
 def _ensure_figure():
     """Ensure there is an active figure."""
@@ -15,8 +18,11 @@ def _ensure_figure():
     if _current_fig is None or plt.fignum_exists(_current_fig.number) == False:
         _current_fig = plt.figure()
 
+
 @mcp.tool()
-def plot_line(x_data: list, y_data: list, title: str = "", xlabel: str = "", ylabel: str = "") -> str:
+def plot_line(
+    x_data: list, y_data: list, title: str = "", xlabel: str = "", ylabel: str = ""
+) -> str:
     """
     Create a line plot from x and y data.
 
@@ -31,7 +37,7 @@ def plot_line(x_data: list, y_data: list, title: str = "", xlabel: str = "", yla
         return "Error: x_data and y_data must have the same length."
     _ensure_figure()
     plt.clf()
-    plt.plot(x_data, y_data, marker='o')
+    plt.plot(x_data, y_data, marker="o")
     if title:
         plt.title(title)
     if xlabel:
@@ -41,8 +47,11 @@ def plot_line(x_data: list, y_data: list, title: str = "", xlabel: str = "", yla
     plt.grid(True)
     return f"Created line plot with {len(x_data)} points."
 
+
 @mcp.tool()
-def plot_bar(categories: list, values: list, title: str = "", xlabel: str = "", ylabel: str = "") -> str:
+def plot_bar(
+    categories: list, values: list, title: str = "", xlabel: str = "", ylabel: str = ""
+) -> str:
     """
     Create a bar chart from categories and values.
 
@@ -64,12 +73,15 @@ def plot_bar(categories: list, values: list, title: str = "", xlabel: str = "", 
         plt.xlabel(xlabel)
     if ylabel:
         plt.ylabel(ylabel)
-    plt.xticks(rotation=45, ha='right')
+    plt.xticks(rotation=45, ha="right")
     plt.tight_layout()
     return f"Created bar chart with {len(categories)} categories."
 
+
 @mcp.tool()
-def plot_scatter(x_data: list, y_data: list, title: str = "", xlabel: str = "", ylabel: str = "") -> str:
+def plot_scatter(
+    x_data: list, y_data: list, title: str = "", xlabel: str = "", ylabel: str = ""
+) -> str:
     """
     Create a scatter plot.
 
@@ -94,8 +106,11 @@ def plot_scatter(x_data: list, y_data: list, title: str = "", xlabel: str = "", 
     plt.grid(True)
     return f"Created scatter plot with {len(x_data)} points."
 
+
 @mcp.tool()
-def plot_histogram(data: list, bins: int = 10, title: str = "", xlabel: str = "", ylabel: str = "") -> str:
+def plot_histogram(
+    data: list, bins: int = 10, title: str = "", xlabel: str = "", ylabel: str = ""
+) -> str:
     """
     Create a histogram from data.
 
@@ -110,7 +125,7 @@ def plot_histogram(data: list, bins: int = 10, title: str = "", xlabel: str = ""
         return "Error: data list cannot be empty."
     _ensure_figure()
     plt.clf()
-    plt.hist(data, bins=bins, edgecolor='black')
+    plt.hist(data, bins=bins, edgecolor="black")
     if title:
         plt.title(title)
     if xlabel:
@@ -119,8 +134,15 @@ def plot_histogram(data: list, bins: int = 10, title: str = "", xlabel: str = ""
         plt.ylabel(ylabel)
     return f"Created histogram with {len(data)} data points and {bins} bins."
 
+
 @mcp.tool()
-def plot_box(data_series: list, labels: list = None, title: str = "", xlabel: str = "", ylabel: str = "") -> str:
+def plot_box(
+    data_series: list,
+    labels: Optional[list] = None,
+    title: str = "",
+    xlabel: str = "",
+    ylabel: str = "",
+) -> str:
     """
     Create a box plot from multiple data series.
 
@@ -135,7 +157,7 @@ def plot_box(data_series: list, labels: list = None, title: str = "", xlabel: st
         return "Error: data_series cannot be empty."
     _ensure_figure()
     plt.clf()
-    plt.boxplot(data_series, labels=labels)
+    plt.boxplot(data_series, label=labels)
     if title:
         plt.title(title)
     if xlabel:
@@ -144,6 +166,7 @@ def plot_box(data_series: list, labels: list = None, title: str = "", xlabel: st
         plt.ylabel(ylabel)
     plt.grid(True)
     return f"Created box plot with {len(data_series)} series."
+
 
 @mcp.tool()
 def save_plot(filename: str, dpi: int = 100) -> str:
@@ -160,10 +183,11 @@ def save_plot(filename: str, dpi: int = 100) -> str:
     try:
         # Ensure directory exists
         os.makedirs(os.path.dirname(filename), exist_ok=True)
-        _current_fig.savefig(filename, dpi=dpi, bbox_inches='tight')
+        _current_fig.savefig(filename, dpi=dpi, bbox_inches="tight")
         return f"Plot saved to {filename}"
     except Exception as e:
         return f"Error saving plot: {e}"
+
 
 if __name__ == "__main__":
     mcp.run()

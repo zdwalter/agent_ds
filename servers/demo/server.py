@@ -27,5 +27,31 @@ def add_numbers(a: float, b: float) -> str:
     return f"The sum of {a} and {b} is {result}."
 
 
+@mcp.tool()
+def reverse_string(s: str) -> str:
+    """
+    Reverse a string.
+
+    Args:
+        s: The input string.
+    """
+    return s[::-1]
+
+
+@mcp.tool()
+def generate_random_number(low: int = 0, high: int = 100) -> str:
+    """
+    Generate a random integer between low and high (inclusive).
+
+    Args:
+        low: Lower bound (default 0).
+        high: Upper bound (default 100).
+    """
+    import random
+
+    num = random.randint(low, high)
+    return f"Random integer between {low} and {high}: {num}"
+
+
 if __name__ == "__main__":
     mcp.run()

@@ -1,8 +1,11 @@
-from mcp.server.fastmcp import FastMCP
-import requests
 import json
+from typing import Optional
+
+import requests
+from mcp.server.fastmcp import FastMCP
 
 mcp = FastMCP("api_client", log_level="ERROR")
+
 
 def _parse_optional_json(json_str: str):
     """Parse JSON string, return None if empty or invalid."""
@@ -12,6 +15,7 @@ def _parse_optional_json(json_str: str):
         return json.loads(json_str)
     except json.JSONDecodeError:
         raise ValueError("Invalid JSON string")
+
 
 def _make_request(method, url, headers=None, data=None, json_data=None):
     """Internal request helper."""
@@ -25,14 +29,14 @@ def _make_request(method, url, headers=None, data=None, json_data=None):
             headers=parsed_headers,
             data=parsed_data,
             json=parsed_json,
-            timeout=30
+            timeout=30,
         )
         # Build result dict
         result = {
             "status_code": response.status_code,
             "headers": dict(response.headers),
             "text": response.text,
-            "url": response.url
+            "url": response.url,
         }
         try:
             result["json"] = response.json()
@@ -46,8 +50,11 @@ def _make_request(method, url, headers=None, data=None, json_data=None):
     except Exception as e:
         return json.dumps({"error": str(e)})
 
+
 @mcp.tool()
-def http_get(url: str, headers: str = None, params: str = None) -> str:
+def http_get(
+    url: str, headers: Optional[str] = None, params: Optional[str] = None
+) -> str:
     """
     Perform an HTTP GET request.
 
@@ -59,12 +66,14 @@ def http_get(url: str, headers: str = None, params: str = None) -> str:
     parsed_params = _parse_optional_json(params) if params else None
     try:
         parsed_headers = _parse_optional_json(headers) if headers else None
-        response = requests.get(url, headers=parsed_headers, params=parsed_params, timeout=30)
+        response = requests.get(
+            url, headers=parsed_headers, params=parsed_params, timeout=30
+        )
         result = {
             "status_code": response.status_code,
             "headers": dict(response.headers),
             "text": response.text,
-            "url": response.url
+            "url": response.url,
         }
         try:
             result["json"] = response.json()
@@ -74,8 +83,14 @@ def http_get(url: str, headers: str = None, params: str = None) -> str:
     except Exception as e:
         return json.dumps({"error": str(e)})
 
+
 @mcp.tool()
-def http_post(url: str, headers: str = None, data: str = None, json_body: str = None) -> str:
+def http_post(
+    url: str,
+    headers: Optional[str] = None,
+    data: Optional[str] = None,
+    json_body: Optional[str] = None,
+) -> str:
     """
     Perform an HTTP POST request.
 
@@ -87,8 +102,14 @@ def http_post(url: str, headers: str = None, data: str = None, json_body: str = 
     """
     return _make_request("POST", url, headers, data, json_body)
 
+
 @mcp.tool()
-def http_put(url: str, headers: str = None, data: str = None, json_body: str = None) -> str:
+def http_put(
+    url: str,
+    headers: Optional[str] = None,
+    data: Optional[str] = None,
+    json_body: Optional[str] = None,
+) -> str:
     """
     Perform an HTTP PUT request.
 
@@ -100,8 +121,9 @@ def http_put(url: str, headers: str = None, data: str = None, json_body: str = N
     """
     return _make_request("PUT", url, headers, data, json_body)
 
+
 @mcp.tool()
-def http_delete(url: str, headers: str = None) -> str:
+def http_delete(url: str, headers: Optional[str] = None) -> str:
     """
     Perform an HTTP DELETE request.
 
@@ -111,8 +133,15 @@ def http_delete(url: str, headers: str = None) -> str:
     """
     return _make_request("DELETE", url, headers, None, None)
 
+
 @mcp.tool()
-def http_request(method: str, url: str, headers: str = None, data: str = None, json_body: str = None) -> str:
+def http_request(
+    method: str,
+    url: str,
+    headers: Optional[str] = None,
+    data: Optional[str] = None,
+    json_body: Optional[str] = None,
+) -> str:
     """
     Perform a custom HTTP request with any method.
 
@@ -124,6 +153,7 @@ def http_request(method: str, url: str, headers: str = None, data: str = None, j
         json: Optional JSON data (JSON string).
     """
     return _make_request(method, url, headers, data, json_body)
+
 
 if __name__ == "__main__":
     mcp.run()

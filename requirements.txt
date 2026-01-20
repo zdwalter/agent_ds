@@ -9,3 +9,8 @@ requests
 textblob
 docker
 psutil
+scikit-learn
+cryptography
+watchdog
+PyYAML
+PyPDF2

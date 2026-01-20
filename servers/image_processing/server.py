@@ -1,8 +1,10 @@
-from mcp.server.fastmcp import FastMCP
-from PIL import Image, ImageFilter
 import os
 
+from mcp.server.fastmcp import FastMCP
+from PIL import Image, ImageFilter
+
 mcp = FastMCP("image_processing", log_level="ERROR")
+
 
 @mcp.tool()
 def resize_image(
@@ -10,7 +12,7 @@ def resize_image(
     output_path: str,
     width: int,
     height: int,
-    keep_aspect_ratio: bool = True
+    keep_aspect_ratio: bool = True,
 ) -> str:
     """
     Resize an image to new dimensions.
@@ -27,14 +29,10 @@ def resize_image(
     except Exception as e:
         return f"Error resizing image: {e}"
 
+
 @mcp.tool()
 def crop_image(
-    input_path: str,
-    output_path: str,
-    left: int,
-    top: int,
-    right: int,
-    bottom: int
+    input_path: str, output_path: str, left: int, top: int, right: int, bottom: int
 ) -> str:
     """
     Crop a region from an image.
@@ -48,12 +46,10 @@ def crop_image(
     except Exception as e:
         return f"Error cropping image: {e}"
 
+
 @mcp.tool()
 def rotate_image(
-    input_path: str,
-    output_path: str,
-    angle: float,
-    expand: bool = False
+    input_path: str, output_path: str, angle: float, expand: bool = False
 ) -> str:
     """
     Rotate an image by a specified angle.
@@ -67,12 +63,9 @@ def rotate_image(
     except Exception as e:
         return f"Error rotating image: {e}"
 
+
 @mcp.tool()
-def convert_format(
-    input_path: str,
-    output_path: str,
-    quality: int = 85
-) -> str:
+def convert_format(input_path: str, output_path: str, quality: int = 85) -> str:
     """
     Convert image format (e.g., JPEG to PNG).
     """
@@ -84,12 +77,9 @@ def convert_format(
     except Exception as e:
         return f"Error converting image: {e}"
 
+
 @mcp.tool()
-def apply_filter(
-    input_path: str,
-    output_path: str,
-    filter_type: str
-) -> str:
+def apply_filter(input_path: str, output_path: str, filter_type: str) -> str:
     """
     Apply a simple filter to an image.
     """
@@ -110,6 +100,7 @@ def apply_filter(
             return f"Filter '{filter_type}' applied and saved to {output_path}"
     except Exception as e:
         return f"Error applying filter: {e}"
+
 
 if __name__ == "__main__":
     mcp.run()
