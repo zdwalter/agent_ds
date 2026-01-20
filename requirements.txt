@@ -6,3 +6,6 @@ matplotlib
 pandas
 numpy
 requests
+textblob
+docker
+psutil
