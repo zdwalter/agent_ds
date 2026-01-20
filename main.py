@@ -34,11 +34,12 @@ def get_api_key() -> str:
 
 
 async def process_single_input(agent, user_input):
-    import platform
     import datetime
-    import os
     import json
+    import os
+    import platform
     import traceback
+
     from openai import OpenAIError
     from rich.console import Console
     from rich.live import Live
@@ -48,7 +49,7 @@ async def process_single_input(agent, user_input):
     console = Console()
 
     # Start logging (optional)
-    if hasattr(agent, '_start_logging'):
+    if hasattr(agent, "_start_logging"):
         agent._start_logging()
 
     # Build system prompt (same as in chat_loop)
@@ -87,12 +88,12 @@ Keep reasoning chain-of-thought light and concise, avoid overthinking. Focus on 
     # Initialize messages if empty
     if not agent.messages:
         agent.messages.append({"role": "system", "content": system_prompt})
-        if hasattr(agent, '_log'):
+        if hasattr(agent, "_log"):
             agent._log("system", system_prompt)
 
     # Add user input
     agent.messages.append({"role": "user", "content": user_input})
-    if hasattr(agent, '_log'):
+    if hasattr(agent, "_log"):
         agent._log("user", user_input)
 
     tool_iterations = 0
@@ -100,16 +101,18 @@ Keep reasoning chain-of-thought light and concise, avoid overthinking. Focus on 
 
     while True:
         if tool_iterations >= MAX_TOOL_ITERATIONS:
-            console.print(f"[red]Max tool iterations ({MAX_TOOL_ITERATIONS}) reached. Stopping execution.[/]")
+            console.print(
+                f"[red]Max tool iterations ({MAX_TOOL_ITERATIONS}) reached. Stopping execution.[/]"
+            )
             break
 
         # Check context length (optional)
-        if hasattr(agent, '_condense_context'):
+        if hasattr(agent, "_condense_context"):
             await agent._condense_context()
 
         # Construct tools list dynamically based on loaded skills
         tools = []
-        if hasattr(agent, 'list_tools'):
+        if hasattr(agent, "list_tools"):
             tools = await agent.list_tools()
 
         # Capture reasoning_content for API compliance
@@ -196,10 +199,8 @@ Keep reasoning chain-of-thought light and concise, avoid overthinking. Focus on 
         if reasoning_storage:
             assistant_msg["reasoning_content"] = reasoning_storage
 
-        if hasattr(agent, '_log'):
-            agent._log(
-                "assistant", full_content, reasoning_content=reasoning_storage
-            )
+        if hasattr(agent, "_log"):
+            agent._log("assistant", full_content, reasoning_content=reasoning_storage)
 
         if tool_calls:
             # Reconstruct tool_calls object for history
@@ -212,7 +213,7 @@ Keep reasoning chain-of-thought light and concise, avoid overthinking. Focus on 
                 for tc in tool_calls
             ]
             for tc in tool_calls:
-                if hasattr(agent, '_log'):
+                if hasattr(agent, "_log"):
                     agent._log(
                         "tool_call",
                         "",
@@ -236,9 +237,7 @@ Keep reasoning chain-of-thought light and concise, avoid overthinking. Focus on 
             except (json.JSONDecodeError, RuntimeError, OpenAIError) as e:
                 result = f"Error: {str(e)}"
 
-            console.print(
-                Panel(result, title=fn_name, border_style="cyan", height=5)
-            )
+            console.print(Panel(result, title=fn_name, border_style="cyan", height=5))
 
             agent.messages.append(
                 {
@@ -247,7 +246,7 @@ Keep reasoning chain-of-thought light and concise, avoid overthinking. Focus on 
                     "content": result,
                 }
             )
-            if hasattr(agent, '_log'):
+            if hasattr(agent, "_log"):
                 agent._log("tool_result", result, tool_name=fn_name)
 
         tool_iterations += 1
