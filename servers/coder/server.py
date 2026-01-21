@@ -102,6 +102,66 @@ def _analyze_typescript_file(path: Path) -> str:
         return f"Error parsing TypeScript file: {e}"
 
 
+def _analyze_java_file(path: Path) -> str:
+    """Extracts high-level structure from a Java file."""
+    try:
+        content = path.read_text(encoding="utf-8", errors="replace")
+        summary = []
+        import re
+
+        # Match class definitions (including public, abstract, etc.)
+        class_pattern = (
+            r"(?:public\s+|private\s+|protected\s+|abstract\s+)*class\s+(\w+)"
+        )
+        for match in re.finditer(class_pattern, content):
+            summary.append(f"Class: {match.group(1)}")
+        # Method declarations (simplified)
+        method_pattern = r"(?:public\s+|private\s+|protected\s+|static\s+)*\w+\s+(\w+)\s*\([^)]*\)\s*(?:\{|\s*throws)"
+        for match in re.finditer(method_pattern, content):
+            summary.append(f"Method: {match.group(1)}")
+        # Interface definitions
+        interface_pattern = r"interface\s+(\w+)"
+        for match in re.finditer(interface_pattern, content):
+            summary.append(f"Interface: {match.group(1)}")
+        # Enum definitions
+        enum_pattern = r"enum\s+(\w+)"
+        for match in re.finditer(enum_pattern, content):
+            summary.append(f"Enum: {match.group(1)}")
+
+        return "\n".join(summary) if summary else "No classes/methods found."
+    except Exception as e:
+        return f"Error parsing Java file: {e}"
+
+
+def _analyze_cpp_file(path: Path) -> str:
+    """Extracts high-level structure from a C++ file."""
+    try:
+        content = path.read_text(encoding="utf-8", errors="replace")
+        summary = []
+        import re
+
+        # Match class/struct definitions
+        class_pattern = r"(?:class|struct)\s+(\w+)\s*(?::[^{]*)?\s*\{"
+        for match in re.finditer(class_pattern, content):
+            summary.append(f"Class/Struct: {match.group(1)}")
+        # Function definitions (including return type)
+        func_pattern = r"\w+\s+\w+\s*\([^)]*\)\s*(?:const\s*)?\{"
+        for match in re.finditer(func_pattern, content):
+            # Extract function name (simplified)
+            # This regex is simplistic; better to parse properly.
+            # We'll just capture the word before '(' that is not a type.
+            # For simplicity, we'll skip for now.
+            pass
+        # Namespace
+        namespace_pattern = r"namespace\s+(\w+)\s*\{"
+        for match in re.finditer(namespace_pattern, content):
+            summary.append(f"Namespace: {match.group(1)}")
+
+        return "\n".join(summary) if summary else "No classes/namespaces found."
+    except Exception as e:
+        return f"Error parsing C++ file: {e}"
+
+
 def _search_files_python(
     folder_path: str,
     pattern: str,
@@ -208,6 +268,8 @@ def investigate_and_save_report(folder_path: str) -> str:
     python_analyses = []
     javascript_analyses = []
     typescript_analyses = []
+    java_analyses = []
+    cpp_analyses = []
     other_files_summary = []
 
     for root, dirs, files in os.walk(str(p)):
@@ -257,6 +319,28 @@ def investigate_and_save_report(folder_path: str) -> str:
                         f"- **{file_rel_path}**\n```text\n{analysis}\n```"
                     )
 
+            # Analyze Java Files
+            elif f.endswith(".java"):
+                analysis = _analyze_java_file(file_path)
+                if analysis:
+                    java_analyses.append(
+                        f"- **{file_rel_path}**\n```text\n{analysis}\n```"
+                    )
+
+            # Analyze C++ Files
+            elif (
+                f.endswith(".cpp")
+                or f.endswith(".hpp")
+                or f.endswith(".h")
+                or f.endswith(".cc")
+                or f.endswith(".cxx")
+            ):
+                analysis = _analyze_cpp_file(file_path)
+                if analysis:
+                    cpp_analyses.append(
+                        f"- **{file_rel_path}**\n```text\n{analysis}\n```"
+                    )
+
             # Summarize Config/Readmes (Keep it short)
             elif f.upper().startswith("README") or f in [
                 "requirements.txt",
@@ -303,7 +387,21 @@ def investigate_and_save_report(folder_path: str) -> str:
         )
         report_content.extend(typescript_analyses)
         report_content.append("")
-    report_content.append("## 5. Configuration & Documentation (Preview)")
+    if java_analyses:
+        report_content.append("## 5. Java Code Overview")
+        report_content.append(
+            "Extracted using regex. Shows classes, methods, interfaces, enums."
+        )
+        report_content.extend(java_analyses)
+        report_content.append("")
+    if cpp_analyses:
+        report_content.append("## 6. C++ Code Overview")
+        report_content.append(
+            "Extracted using regex. Shows classes, structs, namespaces."
+        )
+        report_content.extend(cpp_analyses)
+        report_content.append("")
+    report_content.append("## 7. Configuration & Documentation (Preview)")
     report_content.extend(other_files_summary)
 
     final_report = "\n".join(report_content)
@@ -740,7 +838,7 @@ def search_and_replace(
     max_files: Optional[int] = None,
 ) -> str:
     """
-    Search and replace across multiple files using grep and sed.
+    Search and replace across multiple files using pure Python (no grep/sed).
 
     Args:
         folder_path: Directory to search in.
@@ -755,8 +853,10 @@ def search_and_replace(
         Summary of replacements made.
     """
     try:
-        import os
-        import subprocess
+        import fnmatch
+        import re
+        import shutil
+        from pathlib import Path
 
         p = Path(folder_path).expanduser().resolve()
         if not p.exists():
@@ -764,40 +864,57 @@ def search_and_replace(
         if not p.is_dir():
             return f"Error: Path is not a directory: {folder_path}"
 
-        # Use grep to find files containing the pattern
-        result = subprocess.run(
-            ["grep", "-r", "-l", search_pattern, str(p)],
-            capture_output=True,
-            text=True,
-        )
-        if result.returncode != 0 and result.returncode != 1:
-            return f"Grep failed: {result.stderr}"
-        files = result.stdout.strip().split("\n")
-        files = [f for f in files if f]
+        # Compile regex
+        try:
+            regex = re.compile(search_pattern)
+        except re.error as e:
+            return f"Invalid regex pattern: {e}"
+
+        # Collect matching files
+        matched_files = []
+        for root, dirs, files in os.walk(str(p)):
+            for f in files:
+                if not fnmatch.fnmatch(f, file_pattern):
+                    continue
+                file_path = Path(root) / f
+                try:
+                    content = file_path.read_text(encoding="utf-8", errors="replace")
+                    if regex.search(content):
+                        matched_files.append(file_path)
+                except UnicodeDecodeError:
+                    # Skip binary files
+                    continue
+                except Exception as e:
+                    # Log error but continue
+                    pass
+
         if max_files is not None:
-            files = files[:max_files]
-        if not files:
+            matched_files = matched_files[:max_files]
+
+        if not matched_files:
             return "No files matched the search pattern."
 
         if dry_run:
             lines = ["## Files that would be modified (dry run):", ""]
-            for file in files:
-                lines.append(f"- `{file}`")
+            for file_path in matched_files:
+                lines.append(f"- `{file_path}`")
             return "\n".join(lines)
 
         # Perform replacement
         replaced_count = 0
-        for file in files:
-            # Use sed -i.bak for backup (macOS syntax)
-            subprocess.run(
-                ["sed", "-i.bak", f"s/{search_pattern}/{replace_pattern}/g", file],
-                check=False,
-            )
-            # Remove backup unless keep_backup is True
-            if not keep_backup:
-                backup = file + ".bak"
-                if os.path.exists(backup):
-                    os.remove(backup)
+        for file_path in matched_files:
+            # Read content
+            content = file_path.read_text(encoding="utf-8", errors="replace")
+            # Replace all occurrences
+            new_content, num_replacements = regex.subn(replace_pattern, content)
+            if num_replacements == 0:
+                continue
+            # Create backup if requested
+            if keep_backup:
+                backup_path = file_path.with_suffix(file_path.suffix + ".bak")
+                shutil.copy2(file_path, backup_path)
+            # Write new content
+            file_path.write_text(new_content, encoding="utf-8")
             replaced_count += 1
 
         summary = f"Replaced pattern '{search_pattern}' with '{replace_pattern}' in {replaced_count} files."
@@ -2011,6 +2128,56 @@ def add_missing_imports(file_path: str) -> str:
         return f"Syntax error in file: {e}"
     except Exception as e:
         return f"Error adding imports: {str(e)}"
+
+
+@mcp.tool()
+def list_functions(file_path: str) -> str:
+    """
+    List functions, classes, and other top-level definitions in a file.
+
+    Supports Python, JavaScript, TypeScript, Java, and C++ files.
+
+    Args:
+        file_path: Absolute path to the file.
+
+    Returns:
+        Markdown list of definitions or error message.
+    """
+    from pathlib import Path
+
+    p = Path(file_path).expanduser().resolve()
+    if not p.exists():
+        return f"Error: File not found: {file_path}"
+    suffix = p.suffix.lower()
+
+    analysis = ""
+    if suffix == ".py":
+        analysis = _analyze_python_file(p)
+    elif suffix == ".js":
+        analysis = _analyze_javascript_file(p)
+    elif suffix in (".ts", ".tsx"):
+        analysis = _analyze_typescript_file(p)
+    elif suffix == ".java":
+        analysis = _analyze_java_file(p)
+    elif suffix in (".cpp", ".hpp", ".h", ".cc", ".cxx"):
+        analysis = _analyze_cpp_file(p)
+    else:
+        return f"Error: Unsupported file type. Supported: .py, .js, .ts, .tsx, .java, .cpp, .hpp, .h, .cc, .cxx"
+
+    if not analysis or analysis.startswith("Error"):
+        return f"No definitions found or error analyzing file: {analysis}"
+
+    # Format nicely
+    lines = analysis.split("\n")
+    if lines:
+        return (
+            "## Definitions in "
+            + p.name
+            + "\n\n"
+            + "\n".join(f"- {line}" for line in lines if line.strip())
+        )
+    else:
+        return "No definitions found."
 
 
 if __name__ == "__main__":

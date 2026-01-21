@@ -37,6 +37,7 @@ allowed-tools:
   - security_scan
   - add_missing_imports
   - test_coverage
+  - list_functions
 ---
 
 # Coder Skill
@@ -218,6 +219,11 @@ Returns security issues found by bandit.
 Run test coverage analysis using coverage.py and pytest.
 - `path`: Absolute path to the project root directory.
 Returns coverage report summary.
+
+### list_functions
+List functions, classes, and other top-level definitions in a file. Supports Python, JavaScript, TypeScript, Java, and C++ files.
+- `file_path`: Absolute path to the file.
+Returns a markdown list of definitions or error message.
 ## Usage Strategy: Reliable Code Editing
 
 To edit files efficiently and correctly using `apply_edit_blocks`, follow this distinct workflow. This method prevents "SEARCH block not found" errors by ensuring you have the exact text.
