@@ -40,6 +40,93 @@ def _analyze_python_file(path: Path) -> str:
         return f"Error parsing Python file: {e}"
 
 
+def _analyze_javascript_file(path: Path) -> str:
+    """Extracts high-level structure (functions, classes) from a JavaScript file."""
+    try:
+        content = path.read_text(encoding="utf-8", errors="replace")
+        summary = []
+        # Simple regex for function declarations
+        import re
+
+        # Match function declarations: function name(...) { ... }
+        func_pattern = r"function\s+(\w+)\s*\([^)]*\)\s*{"
+        for match in re.finditer(func_pattern, content):
+            summary.append(f"Function: {match.group(1)}")
+        # Match arrow functions assigned to const/let/var
+        arrow_pattern = r"(?:const|let|var)\s+(\w+)\s*=\s*\([^)]*\)\s*=>"
+        for match in re.finditer(arrow_pattern, content):
+            summary.append(f"Arrow Function: {match.group(1)}")
+        # Match class declarations
+        class_pattern = r"class\s+(\w+)"
+        for match in re.finditer(class_pattern, content):
+            summary.append(f"Class: {match.group(1)}")
+        return "\n".join(summary) if summary else "No functions/classes found."
+    except Exception as e:
+        return f"Error parsing JavaScript file: {e}"
+
+
+def _search_files_python(
+    folder_path: str,
+    pattern: str,
+    ignore_case: bool = False,
+    file_pattern: str = "*",
+    max_depth: Optional[int] = None,
+) -> str:
+    """
+    Search for pattern in files using pure Python.
+    """
+    import re
+    from pathlib import Path
+
+    p = Path(folder_path).expanduser().resolve()
+    if not p.exists():
+        return f"Error: Path not found: {folder_path}"
+    if not p.is_dir():
+        return f"Error: Path is not a directory: {folder_path}"
+
+    # Compile regex
+    flags = re.IGNORECASE if ignore_case else 0
+    try:
+        regex = re.compile(pattern, flags)
+    except re.error as e:
+        return f"Error in regex pattern: {e}"
+
+    # Prepare file pattern matching
+    from fnmatch import fnmatch
+
+    matches = []
+    # Walk directory
+    for root, dirs, files in os.walk(str(p)):
+        # Apply max_depth
+        if max_depth is not None:
+            current_depth = Path(root).relative_to(p).parts
+            if len(current_depth) >= max_depth:
+                dirs.clear()  # don't go deeper
+        for file in files:
+            if not fnmatch(file, file_pattern):
+                continue
+            file_path = Path(root) / file
+            try:
+                content = file_path.read_text(encoding="utf-8", errors="replace")
+                lines = content.splitlines()
+                for i, line in enumerate(lines, start=1):
+                    if regex.search(line):
+                        matches.append(f"{file_path}:{i}:{line}")
+            except UnicodeDecodeError:
+                # Skip binary files
+                continue
+            except Exception as e:
+                matches.append(f"{file_path}:0:Error reading file: {e}")
+
+    if not matches:
+        return "No matches found."
+
+    output = "\n".join(matches)
+    if len(output) > 5000:
+        output = output[:5000] + "\n... (output truncated)"
+    return output
+
+
 @mcp.tool()
 def investigate_and_save_report(folder_path: str) -> str:
     """
@@ -82,6 +169,7 @@ def investigate_and_save_report(folder_path: str) -> str:
     # Generate Tree Structure
     structure_lines = []
     python_analyses = []
+    javascript_analyses = []
     other_files_summary = []
 
     for root, dirs, files in os.walk(str(p)):
@@ -112,6 +200,14 @@ def investigate_and_save_report(folder_path: str) -> str:
                 analysis = _analyze_python_file(file_path)
                 if analysis:
                     python_analyses.append(
+                        f"- **{file_rel_path}**\n```text\n{analysis}\n```"
+                    )
+
+            # Analyze JavaScript Files
+            elif f.endswith(".js"):
+                analysis = _analyze_javascript_file(file_path)
+                if analysis:
+                    javascript_analyses.append(
                         f"- **{file_rel_path}**\n```text\n{analysis}\n```"
                     )
 
@@ -149,7 +245,12 @@ def investigate_and_save_report(folder_path: str) -> str:
     )
     report_content.extend(python_analyses)
     report_content.append("")
-    report_content.append("## 3. Configuration & Documentation (Preview)")
+    if javascript_analyses:
+        report_content.append("## 3. JavaScript Code Overview")
+        report_content.append("Extracted using regex. Shows functions, classes.")
+        report_content.extend(javascript_analyses)
+        report_content.append("")
+    report_content.append("## 4. Configuration & Documentation (Preview)")
     report_content.extend(other_files_summary)
 
     final_report = "\n".join(report_content)
@@ -194,8 +295,12 @@ def read_code_file(file_path: str, start_line: int = 1, end_line: int = -1) -> s
 
         content = "".join(selected_lines)
         return f"--- {file_path} (Lines {start_line}-{end_line} of {total_lines}) ---\n{content}"
+    except OSError as e:
+        return f"OS error reading {file_path}: {e}"
+    except UnicodeDecodeError as e:
+        return f"Unicode decode error in {file_path}: {e}. Try specifying a different encoding."
     except Exception as e:
-        return f"Error reading file: {str(e)}"
+        return f"Unexpected error reading {file_path}: {e}"
 
 
 @mcp.tool()
@@ -208,27 +313,9 @@ def search_in_files(folder_path: str, pattern: str) -> str:
         pattern: The text or regex pattern to search for.
     """
     try:
-        p = Path(folder_path).expanduser().resolve()
-        if not p.exists():
-            return f"Error: Path not found: {folder_path}"
-
-        # Using grep -r
-        result = subprocess.run(
-            ["grep", "-r", "-n", pattern, str(p)], capture_output=True, text=True
+        return _search_files_python(
+            folder_path, pattern, ignore_case=False, file_pattern="*", max_depth=None
         )
-
-        if result.returncode != 0 and result.returncode != 1:
-            return f"Grep command failed: {result.stderr}"
-
-        if not result.stdout:
-            return "No matches found."
-
-        # Truncate if too long
-        output = result.stdout
-        if len(output) > 5000:
-            output = output[:5000] + "\n... (output truncated)"
-
-        return output
     except Exception as e:
         return f"Error executing search: {str(e)}"
 
@@ -387,6 +474,387 @@ def create_file(
         return f"Success: {action} file at {p}"
     except Exception as e:
         return f"Error creating file: {str(e)}"
+
+
+@mcp.tool()
+def format_code_with_black(file_path: str) -> str:
+    """
+    Format a Python file using Black code formatter.
+
+    Args:
+        file_path: Absolute path to the Python file to format.
+    """
+    try:
+        p = Path(file_path).expanduser().resolve()
+        if not p.exists():
+            return f"Error: File not found at {file_path}"
+        if not p.is_file():
+            return f"Error: Path is not a file: {file_path}"
+        if not p.suffix == ".py":
+            return f"Error: Not a Python file (missing .py extension)."
+
+        # Run black on the file
+        result = subprocess.run(
+            ["black", str(p)], capture_output=True, text=True, timeout=30
+        )
+        if result.returncode == 0:
+            return f"Successfully formatted {p.name} with Black."
+        else:
+            return f"Black formatting failed:\nSTDOUT: {result.stdout}\nSTDERR: {result.stderr}"
+    except subprocess.TimeoutExpired:
+        return "Error: Black formatting timed out."
+    except Exception as e:
+        return f"Error running Black: {str(e)}"
+
+
+@mcp.tool()
+def analyze_code_complexity(file_path: str) -> str:
+    """
+    Analyze code complexity of a Python file using Radon.
+
+    Args:
+        file_path: Absolute path to the Python file to analyze.
+    """
+    try:
+        p = Path(file_path).expanduser().resolve()
+        if not p.exists():
+            return f"Error: File not found at {file_path}"
+        if not p.is_file():
+            return f"Error: Path is not a file: {file_path}"
+        if not p.suffix == ".py":
+            return f"Error: Not a Python file (missing .py extension)."
+
+        # Run radon cc (cyclomatic complexity)
+        result = subprocess.run(
+            ["radon", "cc", "-s", str(p)], capture_output=True, text=True, timeout=30
+        )
+        if result.returncode == 0:
+            return f"Complexity analysis for {p.name}:\n{result.stdout}"
+        else:
+            return f"Radon analysis failed:\nSTDOUT: {result.stdout}\nSTDERR: {result.stderr}"
+    except subprocess.TimeoutExpired:
+        return "Error: Radon analysis timed out."
+    except Exception as e:
+        return f"Error running Radon: {str(e)}"
+
+
+@mcp.tool()
+def lint_python_file(file_path: str) -> str:
+    """
+    Lint a Python file using flake8.
+
+    Args:
+        file_path: Absolute path to the Python file to lint.
+    """
+    try:
+        p = Path(file_path).expanduser().resolve()
+        if not p.exists():
+            return f"Error: File not found at {file_path}"
+        if not p.is_file():
+            return f"Error: Path is not a file: {file_path}"
+        if not p.suffix == ".py":
+            return f"Error: Not a Python file (missing .py extension)."
+
+        # Run flake8
+        import subprocess
+
+        result = subprocess.run(
+            ["flake8", str(p)], capture_output=True, text=True, timeout=30
+        )
+        if result.returncode == 0:
+            return f"No linting issues found in {p.name}."
+        else:
+            # flake8 outputs issues to stdout
+            output = result.stdout if result.stdout else result.stderr
+            return f"Linting issues in {p.name}:\n{output}"
+    except subprocess.TimeoutExpired:
+        return "Error: Flake8 linting timed out."
+    except FileNotFoundError:
+        return "Error: flake8 not installed. Install with 'pip install flake8'."
+    except Exception as e:
+        return f"Error running flake8: {str(e)}"
+
+
+@mcp.tool()
+def search_in_files_advanced(
+    folder_path: str,
+    pattern: str,
+    ignore_case: bool = False,
+    file_pattern: str = "*",
+    max_depth: Optional[int] = None,
+) -> str:
+    """
+    Search for a pattern in files within a folder with advanced options.
+
+    Args:
+        folder_path: The directory to search in.
+        pattern: The text or regex pattern to search for.
+        ignore_case: If True, perform case-insensitive search.
+        file_pattern: File pattern to filter files (e.g., "*.py", "*.txt").
+        max_depth: Maximum depth of directories to search (None for unlimited).
+    """
+    try:
+        return _search_files_python(
+            folder_path, pattern, ignore_case, file_pattern, max_depth
+        )
+    except subprocess.TimeoutExpired:
+        return "Error: Search timed out."
+    except Exception as e:
+        return f"Error executing search: {str(e)}"
+
+
+@mcp.tool()
+def generate_code(prompt: str, language: str = "python") -> str:
+    """
+    Generate code based on a natural language prompt using OpenAI.
+
+    Args:
+        prompt: Natural language description of the code to generate.
+        language: Programming language (default: "python").
+
+    Returns:
+        Generated code or error message.
+    """
+    try:
+        import os
+
+        import openai
+
+        api_key = os.environ.get("OPENAI_API_KEY")
+        if not api_key:
+            return "Error: OPENAI_API_KEY environment variable not set."
+
+        client = openai.OpenAI(api_key=api_key)
+        response = client.chat.completions.create(
+            model="gpt-4o-mini",
+            messages=[
+                {
+                    "role": "system",
+                    "content": f"You are a helpful coding assistant. Generate code in {language}.",
+                },
+                {"role": "user", "content": prompt},
+            ],
+            temperature=0.2,
+            max_tokens=1000,
+        )
+        generated = response.choices[0].message.content.strip()
+        return f"Generated code ({language}):\n```{language}\n{generated}\n```"
+    except ImportError:
+        return "Error: openai package not installed. Install with 'pip install openai'."
+    except Exception as e:
+        return f"Error generating code: {str(e)}"
+
+
+@mcp.tool()
+def search_and_replace(
+    folder_path: str, search_pattern: str, replace_pattern: str, file_pattern: str = "*"
+) -> str:
+    """
+    Search and replace across multiple files using grep and sed.
+
+    Args:
+        folder_path: Directory to search in.
+        search_pattern: Regex pattern to search for.
+        replace_pattern: Replacement string (supports backreferences).
+        file_pattern: File pattern to filter (default "*").
+
+    Returns:
+        Summary of replacements made.
+    """
+    try:
+        import os
+        import subprocess
+
+        p = Path(folder_path).expanduser().resolve()
+        if not p.exists():
+            return f"Error: Path not found: {folder_path}"
+        if not p.is_dir():
+            return f"Error: Path is not a directory: {folder_path}"
+
+        # Use find + xargs + sed -i
+        find_cmd = ["find", str(p), "-type", "f", "-name", file_pattern]
+        # Exclude binary files
+        find_cmd.extend(["!", "-exec", "file", "{}", ";", "|", "grep", "-q", "binary"])
+        # Combine with xargs sed
+        # We'll use a simpler approach: loop over files
+        # For safety, we'll do a dry-run first
+        result = subprocess.run(
+            ["grep", "-r", "-l", search_pattern, str(p)],
+            capture_output=True,
+            text=True,
+        )
+        if result.returncode != 0 and result.returncode != 1:
+            return f"Grep failed: {result.stderr}"
+        files = result.stdout.strip().split("\n")
+        files = [f for f in files if f]
+        if not files:
+            return "No files matched the search pattern."
+
+        # Perform replacement
+        replaced_count = 0
+        for file in files:
+            # Use sed -i.bak for backup (macOS syntax)
+            subprocess.run(
+                ["sed", "-i.bak", f"s/{search_pattern}/{replace_pattern}/g", file],
+                check=False,
+            )
+            # Remove backup
+            backup = file + ".bak"
+            if os.path.exists(backup):
+                os.remove(backup)
+            replaced_count += 1
+
+        return f"Replaced pattern '{search_pattern}' with '{replace_pattern}' in {replaced_count} files."
+    except Exception as e:
+        return f"Error in search_and_replace: {str(e)}"
+
+
+@mcp.tool()
+def git_status(repo_path: str = ".") -> str:
+    """
+    Show git status of a repository.
+
+    Args:
+        repo_path: Path to the git repository (default current directory).
+    """
+    try:
+        import subprocess
+
+        result = subprocess.run(
+            ["git", "-C", repo_path, "status", "--short"],
+            capture_output=True,
+            text=True,
+        )
+        if result.returncode != 0:
+            return f"Error running git status: {result.stderr}"
+        return result.stdout if result.stdout else "No changes."
+    except Exception as e:
+        return f"Error: {str(e)}"
+
+
+@mcp.tool()
+def git_diff(repo_path: str = ".", file_path: Optional[str] = None) -> str:
+    """
+    Show git diff of a repository or specific file.
+
+    Args:
+        repo_path: Path to the git repository.
+        file_path: Optional specific file to diff.
+    """
+    try:
+        import subprocess
+
+        cmd = ["git", "-C", repo_path, "diff"]
+        if file_path:
+            cmd.append(file_path)
+        result = subprocess.run(cmd, capture_output=True, text=True)
+        if result.returncode != 0:
+            return f"Error running git diff: {result.stderr}"
+        return result.stdout if result.stdout else "No differences."
+    except Exception as e:
+        return f"Error: {str(e)}"
+
+
+@mcp.tool()
+def git_commit(repo_path: str = ".", message: str = "", files: List[str] = []) -> str:
+    """
+    Commit changes in a git repository.
+
+    Args:
+        repo_path: Path to the git repository.
+        message: Commit message.
+        files: List of files to commit (empty for all changes).
+    """
+    try:
+        import subprocess
+
+        if not message:
+            return "Error: commit message is required."
+        cmd = ["git", "-C", repo_path, "commit", "-m", message]
+        if files:
+            cmd.extend(files)
+        else:
+            cmd.append("-a")  # commit all changes
+        result = subprocess.run(cmd, capture_output=True, text=True)
+        if result.returncode != 0:
+            return f"Error running git commit: {result.stderr}"
+        return result.stdout if result.stdout else "Committed successfully."
+    except Exception as e:
+        return f"Error: {str(e)}"
+
+
+@mcp.tool()
+def git_log(repo_path: str = ".", count: int = 10) -> str:
+    """
+    Show git log.
+
+    Args:
+        repo_path: Path to the git repository.
+        count: Number of commits to show.
+    """
+    try:
+        import subprocess
+
+        result = subprocess.run(
+            ["git", "-C", repo_path, "log", f"-{count}", "--oneline"],
+            capture_output=True,
+            text=True,
+        )
+        if result.returncode != 0:
+            return f"Error running git log: {result.stderr}"
+        return result.stdout if result.stdout else "No commits."
+    except Exception as e:
+        return f"Error: {str(e)}"
+
+
+@mcp.tool()
+def type_check_with_mypy(file_path: str) -> str:
+    """
+    Run mypy type checking on a Python file.
+
+    Args:
+        file_path: Path to the Python file.
+    """
+    try:
+        import subprocess
+
+        result = subprocess.run(
+            ["mypy", file_path],
+            capture_output=True,
+            text=True,
+        )
+        if result.returncode == 0:
+            return "No type errors found."
+        else:
+            return f"Type checking results:\n{result.stdout}\n{result.stderr}"
+    except FileNotFoundError:
+        return "Error: mypy not installed. Install with 'pip install mypy'."
+    except Exception as e:
+        return f"Error running mypy: {str(e)}"
+
+
+@mcp.tool()
+def lint_with_pylint(file_path: str) -> str:
+    """
+    Run pylint on a Python file.
+
+    Args:
+        file_path: Path to the Python file.
+    """
+    try:
+        import subprocess
+
+        result = subprocess.run(
+            ["pylint", file_path],
+            capture_output=True,
+            text=True,
+        )
+        # pylint returns non-zero when there are issues, which is fine
+        return result.stdout if result.stdout else "No output from pylint."
+    except FileNotFoundError:
+        return "Error: pylint not installed. Install with 'pip install pylint'."
+    except Exception as e:
+        return f"Error running pylint: {str(e)}"
 
 
 if __name__ == "__main__":

@@ -5,10 +5,22 @@ allowed-tools:
   - investigate_and_save_report
   - read_code_file
   - search_in_files
+  - search_in_files_advanced
   - edit_code_file
   - apply_edit_blocks
   - run_terminal_command
   - create_file
+  - format_code_with_black
+  - analyze_code_complexity
+  - lint_python_file
+  - generate_code
+  - search_and_replace
+  - git_status
+  - git_diff
+  - git_commit
+  - git_log
+  - type_check_with_mypy
+  - lint_with_pylint
 ---
 
 # Coder Skill
@@ -53,6 +65,66 @@ Create a new file with optional content, overwrite existing file, or append.
 ### run_terminal_command
 Run terminal commands.
 - `command`: The full shell command to execute.
+
+### format_code_with_black
+Format a Python file using Black code formatter.
+- `file_path`: Absolute path to the Python file to format.
+
+### analyze_code_complexity
+Analyze code complexity of a Python file using Radon.
+- `file_path`: Absolute path to the Python file to analyze.
+
+### lint_python_file
+Lint a Python file using flake8.
+- `file_path`: Absolute path to the Python file to lint.
+
+### search_in_files_advanced
+Search for a pattern in files with advanced options.
+- `folder_path`: The directory to search in.
+- `pattern`: The text or regex pattern to search for.
+- `ignore_case`: If True, perform case-insensitive search (default: False).
+- `file_pattern`: File pattern to filter files (e.g., "*.py", "*.txt") (default: "*").
+- `max_depth`: Maximum depth of directories to search (default: unlimited).
+
+### generate_code
+Generate code based on a natural language prompt using OpenAI.
+- `prompt`: Natural language description of the code to generate.
+- `language`: Programming language (default: "python").
+
+### search_and_replace
+Search and replace across multiple files using grep and sed.
+- `folder_path`: Directory to search in.
+- `search_pattern`: Regex pattern to search for.
+- `replace_pattern`: Replacement string (supports backreferences).
+- `file_pattern`: File pattern to filter (default "*").
+
+### git_status
+Show git status of a repository.
+- `repo_path`: Path to the git repository (default current directory).
+
+### git_diff
+Show git diff of a repository or specific file.
+- `repo_path`: Path to the git repository.
+- `file_path`: Optional specific file to diff.
+
+### git_commit
+Commit changes in a git repository.
+- `repo_path`: Path to the git repository.
+- `message`: Commit message.
+- `files`: List of files to commit (empty for all changes).
+
+### git_log
+Show git log.
+- `repo_path`: Path to the git repository.
+- `count`: Number of commits to show.
+
+### type_check_with_mypy
+Run mypy type checking on a Python file.
+- `file_path`: Path to the Python file.
+
+### lint_with_pylint
+Run pylint on a Python file.
+- `file_path`: Path to the Python file.
 
 ## Usage Strategy: Reliable Code Editing
 
