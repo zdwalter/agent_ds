@@ -2609,8 +2609,8 @@ def extract_function(
         Success message or error description.
     """
     try:
-        from pathlib import Path
         import ast
+        from pathlib import Path
 
         p = Path(file_path).expanduser().resolve()
         if not p.exists():

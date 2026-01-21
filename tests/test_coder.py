@@ -8,11 +8,8 @@ from pathlib import Path
 # Add servers to path
 sys.path.insert(0, str(Path(__file__).parent.parent / "servers"))
 
-from coder.server import (
-    _analyze_python_file,
-    detect_code_smells,
-    investigate_and_save_report,
-)
+from coder.server import (_analyze_python_file, detect_code_smells,
+                          investigate_and_save_report)
 
 
 def test_analyze_python_file():
@@ -111,10 +108,11 @@ def long_func():
 
 def test_extract_function():
     """Test extracting a code block into a new function."""
-    import tempfile
     import os
     import sys
+    import tempfile
     from pathlib import Path
+
     sys.path.insert(0, str(Path(__file__).parent.parent / "servers"))
     from coder.server import extract_function
 
@@ -136,11 +134,11 @@ def test_extract_function():
                 end_line=7,
                 new_function_name="add",
                 params="a,b",
-                return_var="x"
+                return_var="x",
             )
             assert "Successfully extracted" in result
             # Check file content
-            with open(f.name, 'r') as rf:
+            with open(f.name, "r") as rf:
                 content = rf.read()
                 assert "def add(a, b):" in content
                 assert "x = add(a, b)" in content
