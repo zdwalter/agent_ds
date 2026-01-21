@@ -980,5 +980,143 @@ def analyze_dependencies(project_path: str = ".") -> str:
     return "\n".join(report)
 
 
+@mcp.tool()
+def refactor_rename(
+    file_path: str, old_name: str, new_name: str, line_number: Optional[int] = None
+) -> str:
+    """
+    Rename a variable, function, class, or method in a Python file.
+
+    Args:
+        file_path: Absolute path to the file.
+        old_name: The identifier to rename.
+        new_name: The new identifier.
+        line_number: Optional line number where the identifier appears (to disambiguate).
+                     If not provided, renames all occurrences in the file (global rename).
+    Returns:
+        Success message or error description.
+    """
+    try:
+        import ast
+        from pathlib import Path
+
+        p = Path(file_path).expanduser().resolve()
+        if not p.exists():
+            return f"Error: File not found: {file_path}"
+
+        content = p.read_text(encoding="utf-8")
+        tree = ast.parse(content, filename=str(p))
+
+        # Find nodes to rename
+        renamed = 0
+        for node in ast.walk(tree):
+            if isinstance(node, ast.Name) and node.id == old_name:
+                # If line_number is given, check node location
+                if line_number is not None:
+                    if hasattr(node, "lineno") and node.lineno != line_number:
+                        continue
+                node.id = new_name
+                renamed += 1
+
+        if renamed == 0:
+            return f"Error: No identifier '{old_name}' found" + (
+                f" at line {line_number}." if line_number else "."
+            )
+
+        # Convert back to source
+        try:
+            new_content = ast.unparse(tree)
+        except AttributeError:
+            return "Error: ast.unparse not available (requires Python 3.9+)."
+
+        p.write_text(new_content, encoding="utf-8")
+        return f"Renamed {renamed} occurrence(s) of '{old_name}' to '{new_name}'."
+    except Exception as e:
+        return f"Error during rename: {str(e)}"
+
+
+@mcp.tool()
+def debug_insert_breakpoint(
+    file_path: str, line_number: int, use_breakpoint: bool = True
+) -> str:
+    """
+    Insert a breakpoint at a specific line in a Python file.
+
+    Args:
+        file_path: Absolute path to the file.
+        line_number: Line number where to insert the breakpoint (1-based).
+        use_breakpoint: If True, use `breakpoint()` (Python 3.7+). If False, use `import pdb; pdb.set_trace()`.
+    Returns:
+        Success message or error description.
+    """
+    try:
+        from pathlib import Path
+
+        p = Path(file_path).expanduser().resolve()
+        if not p.exists():
+            return f"Error: File not found: {file_path}"
+
+        lines = p.read_text(encoding="utf-8").splitlines()
+        if line_number < 1 or line_number > len(lines) + 1:
+            return f"Error: line_number {line_number} out of range (file has {len(lines)} lines)."
+
+        # Prepare breakpoint line
+        if use_breakpoint:
+            bp_line = "breakpoint()"
+        else:
+            bp_line = "import pdb; pdb.set_trace()"
+
+        # Insert the breakpoint line (adjust for 0‑based index)
+        lines.insert(line_number - 1, bp_line)
+        new_content = "\n".join(lines)
+        p.write_text(new_content, encoding="utf-8")
+        return f"Inserted breakpoint at line {line_number}."
+    except Exception as e:
+        return f"Error inserting breakpoint: {str(e)}"
+
+
+@mcp.tool()
+def profile_python_file(file_path: str, sort_by: str = "time") -> str:
+    """
+    Profile a Python script using cProfile and return a summary.
+
+    Args:
+        file_path: Absolute path to the Python script.
+        sort_by: Sorting criterion for profiling output (e.g., "time", "calls", "cumulative").
+
+    Returns:
+        Profiling report as a string.
+    """
+    try:
+        import subprocess
+        from pathlib import Path
+
+        p = Path(file_path).expanduser().resolve()
+        if not p.exists():
+            return f"Error: File not found: {file_path}"
+
+        # Run cProfile
+        cmd = ["python", "-m", "cProfile", "-s", sort_by, str(p)]
+        result = subprocess.run(
+            cmd,
+            capture_output=True,
+            text=True,
+            timeout=30,  # seconds
+        )
+        if result.returncode != 0:
+            return f"Error running profiler: {result.stderr}"
+
+        # Limit output length
+        output = result.stdout
+        if len(output) > 2000:
+            output = output[:2000] + "\n... (output truncated)"
+
+        return f"## Profiling Report for {p.name}\n\n```\n{output}\n```"
+    except subprocess.TimeoutExpired:
+        return "Error: Profiling timed out after 30 seconds."
+    except Exception as e:
+        return f"Error during profiling: {str(e)}"
+
+
 if __name__ == "__main__":
     mcp.run()

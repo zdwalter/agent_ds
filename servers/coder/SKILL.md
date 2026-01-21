@@ -23,6 +23,9 @@ allowed-tools:
   - lint_with_pylint
   - ai_suggest_code
   - analyze_dependencies
+  - refactor_rename
+  - debug_insert_breakpoint
+  - profile_python_file
 ---
 
 # Coder Skill
@@ -137,6 +140,24 @@ Generate code suggestions using OpenAI's API.
 ### analyze_dependencies
 Analyze Python dependencies in a project.
 - `project_path`: Path to the project root (default current directory).
+
+### refactor_rename
+Rename a variable, function, class, or method in a Python file.
+- `file_path`: Absolute path to the file.
+- `old_name`: The identifier to rename.
+- `new_name`: The new identifier.
+- `line_number`: Optional line number where the identifier appears (to disambiguate). If not provided, renames all occurrences in the file (global rename).
+
+### debug_insert_breakpoint
+Insert a breakpoint at a specific line in a Python file.
+- `file_path`: Absolute path to the file.
+- `line_number`: Line number where to insert the breakpoint (1-based).
+- `use_breakpoint`: If True, use `breakpoint()` (Python 3.7+). If False, use `import pdb; pdb.set_trace()`.
+
+### profile_python_file
+Profile a Python script using cProfile and return a summary.
+- `file_path`: Absolute path to the Python script.
+- `sort_by`: Sorting criterion for profiling output (e.g., "time", "calls", "cumulative").
 
 ## Usage Strategy: Reliable Code Editing
 
