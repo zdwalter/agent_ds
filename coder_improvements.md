@@ -11,6 +11,14 @@
    - Optional `function_name` parameter to focus on a specific function.
    - Returns generated test code as a formatted Python block.
 
+3. **Refactored `add_missing_imports` function**
+   - Split into helper functions to reduce cyclomatic complexity.
+   - Improved maintainability and readability.
+
+4. **Added TypeScript file analysis**
+   - New internal function `_analyze_typescript_file` extracts functions, classes, interfaces, types, and enums.
+   - Integrated into `investigate_and_save_report` for automatic analysis of `.ts` and `.tsx` files.
+
 ## Future Improvements (Suggested)
 
 - Add `find_unused_imports` tool (using vulture or static analysis).

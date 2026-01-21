@@ -47,6 +47,7 @@ This skill provides the agent with capabilities to act as a coding assistant, ex
 
 ### investigate_and_save_report
 Investigates a folder structure and writes a markdown summary named ".test.Agent.md" in that folder.
+Automatically analyzes Python, JavaScript, and TypeScript files to extract high-level structure.
 - `folder_path`: The absolute path of the folder to investigate.
 
 ### read_code_file

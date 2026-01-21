@@ -65,6 +65,43 @@ def _analyze_javascript_file(path: Path) -> str:
         return f"Error parsing JavaScript file: {e}"
 
 
+def _analyze_typescript_file(path: Path) -> str:
+    """Extracts high-level structure from a TypeScript file."""
+    try:
+        content = path.read_text(encoding="utf-8", errors="replace")
+        summary = []
+        import re
+
+        # Match function declarations (including TypeScript syntax)
+        func_pattern = r"function\s+(\w+)\s*\([^)]*\)\s*(?::[^{]*)?\s*{"
+        for match in re.finditer(func_pattern, content):
+            summary.append(f"Function: {match.group(1)}")
+        # Arrow functions
+        arrow_pattern = r"(?:const|let|var)\s+(\w+)\s*=\s*\([^)]*\)\s*=>"
+        for match in re.finditer(arrow_pattern, content):
+            summary.append(f"Arrow Function: {match.group(1)}")
+        # Classes
+        class_pattern = r"class\s+(\w+)"
+        for match in re.finditer(class_pattern, content):
+            summary.append(f"Class: {match.group(1)}")
+        # Interfaces
+        interface_pattern = r"interface\s+(\w+)"
+        for match in re.finditer(interface_pattern, content):
+            summary.append(f"Interface: {match.group(1)}")
+        # Type aliases
+        type_pattern = r"type\s+(\w+)\s*="
+        for match in re.finditer(type_pattern, content):
+            summary.append(f"Type Alias: {match.group(1)}")
+        # Enums
+        enum_pattern = r"enum\s+(\w+)"
+        for match in re.finditer(enum_pattern, content):
+            summary.append(f"Enum: {match.group(1)}")
+
+        return "\n".join(summary) if summary else "No functions/classes found."
+    except Exception as e:
+        return f"Error parsing TypeScript file: {e}"
+
+
 def _search_files_python(
     folder_path: str,
     pattern: str,
@@ -170,6 +207,7 @@ def investigate_and_save_report(folder_path: str) -> str:
     structure_lines = []
     python_analyses = []
     javascript_analyses = []
+    typescript_analyses = []
     other_files_summary = []
 
     for root, dirs, files in os.walk(str(p)):
@@ -208,6 +246,14 @@ def investigate_and_save_report(folder_path: str) -> str:
                 analysis = _analyze_javascript_file(file_path)
                 if analysis:
                     javascript_analyses.append(
+                        f"- **{file_rel_path}**\n```text\n{analysis}\n```"
+                    )
+
+            # Analyze TypeScript Files
+            elif f.endswith(".ts") or f.endswith(".tsx"):
+                analysis = _analyze_typescript_file(file_path)
+                if analysis:
+                    typescript_analyses.append(
                         f"- **{file_rel_path}**\n```text\n{analysis}\n```"
                     )
 
@@ -250,7 +296,14 @@ def investigate_and_save_report(folder_path: str) -> str:
         report_content.append("Extracted using regex. Shows functions, classes.")
         report_content.extend(javascript_analyses)
         report_content.append("")
-    report_content.append("## 4. Configuration & Documentation (Preview)")
+    if typescript_analyses:
+        report_content.append("## 4. TypeScript Code Overview")
+        report_content.append(
+            "Extracted using regex. Shows functions, classes, interfaces, types, enums."
+        )
+        report_content.extend(typescript_analyses)
+        report_content.append("")
+    report_content.append("## 5. Configuration & Documentation (Preview)")
     report_content.extend(other_files_summary)
 
     final_report = "\n".join(report_content)
@@ -1825,6 +1878,84 @@ def test_coverage(path: str) -> str:
         return f"Coverage report error: {e}"
 
 
+def _collect_used_names(tree: ast.AST) -> set[str]:
+    """Collect all names used in the code (excluding builtins)."""
+    import builtins
+
+    used_names = set()
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Name) and isinstance(node.ctx, ast.Load):
+            used_names.add(node.id)
+    # Remove builtins
+    builtin_names = set(dir(builtins))
+    used_names -= builtin_names
+    return used_names
+
+
+def _collect_imported_names(tree: ast.AST) -> set[str]:
+    """Collect all names that are already imported."""
+    imported_names = set()
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Import):
+            for alias in node.names:
+                imported_names.add(alias.name)
+                if alias.asname:
+                    imported_names.add(alias.asname)
+        elif isinstance(node, ast.ImportFrom):
+            if node.module:
+                for alias in node.names:
+                    imported_names.add(alias.name)
+                    if alias.asname:
+                        imported_names.add(alias.asname)
+    return imported_names
+
+
+def _find_importable_modules(names: set[str]) -> list[str]:
+    """Find which names correspond to importable modules."""
+    import importlib.util
+    import sys
+
+    imports_to_add = []
+    for name in sorted(names):
+        # Check if it's a standard library module
+        if hasattr(sys, "stdlib_module_names"):
+            if name in sys.stdlib_module_names:
+                imports_to_add.append(f"import {name}")
+                continue
+        # Try to find spec
+        spec = importlib.util.find_spec(name)
+        if spec is not None:
+            imports_to_add.append(f"import {name}")
+            continue
+        # Could be from a submodule (e.g., pandas.DataFrame)
+        # We'll skip for now
+    return imports_to_add
+
+
+def _determine_insertion_point(lines: list[str]) -> int:
+    """Determine the line number where new imports should be inserted."""
+    insert_line = 0
+    in_docstring = False
+    for i, line in enumerate(lines):
+        stripped = line.strip()
+        if stripped.startswith('"""') or stripped.startswith("'''"):
+            in_docstring = not in_docstring
+            continue
+        if not in_docstring and (
+            stripped.startswith("import ") or stripped.startswith("from ")
+        ):
+            insert_line = i + 1  # insert after this line
+        elif not in_docstring and stripped and not stripped.startswith("#"):
+            # First non-import, non-comment, non-empty line
+            if insert_line == 0:
+                insert_line = i
+            break
+    # If no imports found, insert at line 0 (top of file)
+    if insert_line == 0:
+        insert_line = 0
+    return insert_line
+
+
 @mcp.tool()
 def add_missing_imports(file_path: str) -> str:
     """
@@ -1838,8 +1969,6 @@ def add_missing_imports(file_path: str) -> str:
     """
     try:
         import ast
-        import builtins
-        import importlib.util
         import sys
         from pathlib import Path
 
@@ -1853,75 +1982,19 @@ def add_missing_imports(file_path: str) -> str:
         lines = content.splitlines()
         tree = ast.parse(content)
 
-        # Collect all names used in the code
-        used_names = set()
-        for node in ast.walk(tree):
-            if isinstance(node, ast.Name) and isinstance(node.ctx, ast.Load):
-                used_names.add(node.id)
+        used_names = _collect_used_names(tree)
+        imported_names = _collect_imported_names(tree)
+        missing_names = used_names - imported_names
 
-        # Remove builtins
-        builtin_names = set(dir(builtins))
-        used_names -= builtin_names
-
-        # Remove names that are already imported
-        imported_names = set()
-        for node in ast.walk(tree):
-            if isinstance(node, ast.Import):
-                for alias in node.names:
-                    imported_names.add(alias.name)
-                    if alias.asname:
-                        imported_names.add(alias.asname)
-            elif isinstance(node, ast.ImportFrom):
-                if node.module:
-                    for alias in node.names:
-                        imported_names.add(alias.name)
-                        if alias.asname:
-                            imported_names.add(alias.asname)
-        used_names -= imported_names
-
-        if not used_names:
+        if not missing_names:
             return "No missing imports detected."
 
-        # Try to find which names correspond to importable modules
-        imports_to_add = []
-        for name in sorted(used_names):
-            # Check if it's a standard library module
-            if hasattr(sys, "stdlib_module_names"):
-                if name in sys.stdlib_module_names:
-                    imports_to_add.append(f"import {name}")
-                    continue
-            # Try to find spec
-            spec = importlib.util.find_spec(name)
-            if spec is not None:
-                imports_to_add.append(f"import {name}")
-                continue
-            # Could be from a submodule (e.g., pandas.DataFrame)
-            # We'll skip for now
+        imports_to_add = _find_importable_modules(missing_names)
 
         if not imports_to_add:
             return "Could not find importable modules for the missing names."
 
-        # Determine insertion point: after the last import statement or after module docstring
-        insert_line = 0
-        in_docstring = False
-        for i, line in enumerate(lines):
-            stripped = line.strip()
-            if stripped.startswith('"""') or stripped.startswith("'''"):
-                in_docstring = not in_docstring
-                continue
-            if not in_docstring and (
-                stripped.startswith("import ") or stripped.startswith("from ")
-            ):
-                insert_line = i + 1  # insert after this line
-            elif not in_docstring and stripped and not stripped.startswith("#"):
-                # First non-import, non-comment, non-empty line
-                if insert_line == 0:
-                    insert_line = i
-                break
-
-        # If no imports found, insert at line 0 (top of file)
-        if insert_line == 0:
-            insert_line = 0
+        insert_line = _determine_insertion_point(lines)
 
         # Insert imports
         for imp in reversed(imports_to_add):
