@@ -37,6 +37,8 @@ allowed-tools:
   - security_scan
   - add_missing_imports
   - test_coverage
+  - sort_imports
+  - format_with_ruff
   - list_functions
 ---
 

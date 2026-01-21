@@ -2131,6 +2131,88 @@ def add_missing_imports(file_path: str) -> str:
 
 
 @mcp.tool()
+def sort_imports(file_path: str) -> str:
+    """
+    Sort imports in a Python file using isort.
+
+    Args:
+        file_path: Absolute path to the Python file.
+
+    Returns:
+        Success message or error description.
+    """
+    try:
+        import subprocess
+        from pathlib import Path
+
+        p = Path(file_path).expanduser().resolve()
+        if not p.exists():
+            return f"Error: File not found: {file_path}"
+        if p.suffix != ".py":
+            return "Error: Only Python files are supported."
+
+        # Run isort
+        result = subprocess.run(
+            ["isort", str(p)],
+            capture_output=True,
+            text=True,
+            timeout=30,
+        )
+        if result.returncode == 0:
+            return f"Successfully sorted imports in {p.name} using isort."
+        else:
+            return f"isort failed:\nSTDOUT: {result.stdout}\nSTDERR: {result.stderr}"
+    except subprocess.TimeoutExpired:
+        return "Error: isort timed out."
+    except FileNotFoundError:
+        return "Error: isort not installed. Install with 'pip install isort'."
+    except Exception as e:
+        return f"Error sorting imports: {str(e)}"
+
+
+@mcp.tool()
+def format_with_ruff(file_path: str) -> str:
+    """
+    Format a Python file using ruff.
+
+    Args:
+        file_path: Absolute path to the Python file.
+
+    Returns:
+        Success message or error description.
+    """
+    try:
+        import subprocess
+        from pathlib import Path
+
+        p = Path(file_path).expanduser().resolve()
+        if not p.exists():
+            return f"Error: File not found: {file_path}"
+        if p.suffix != ".py":
+            return "Error: Only Python files are supported."
+
+        # Run ruff format
+        result = subprocess.run(
+            ["ruff", "format", str(p)],
+            capture_output=True,
+            text=True,
+            timeout=30,
+        )
+        if result.returncode == 0:
+            return f"Successfully formatted {p.name} using ruff."
+        else:
+            return (
+                f"ruff format failed:\nSTDOUT: {result.stdout}\nSTDERR: {result.stderr}"
+            )
+    except subprocess.TimeoutExpired:
+        return "Error: ruff timed out."
+    except FileNotFoundError:
+        return "Error: ruff not installed. Install with 'pip install ruff'."
+    except Exception as e:
+        return f"Error formatting with ruff: {str(e)}"
+
+
+@mcp.tool()
 def list_functions(file_path: str) -> str:
     """
     List functions, classes, and other top-level definitions in a file.

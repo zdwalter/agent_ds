@@ -19,6 +19,14 @@
    - New internal function `_analyze_typescript_file` extracts functions, classes, interfaces, types, and enums.
    - Integrated into `investigate_and_save_report` for automatic analysis of `.ts` and `.tsx` files.
 
+5. **Added `sort_imports` tool**
+   - Sorts imports in a Python file using isort (if installed).
+   - Provides clear error messages if isort is missing.
+
+6. **Added `format_with_ruff` tool**
+   - Formats a Python file using ruff formatter (if installed).
+   - Alternative to Black for faster formatting.
+
 ## Future Improvements (Suggested)
 
 - Add `find_unused_imports` tool (using vulture or static analysis).
