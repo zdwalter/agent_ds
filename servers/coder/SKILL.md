@@ -49,6 +49,7 @@ allowed-tools:
   - list_functions
   - detect_duplicate_code
   - generate_api_docs
+  - visualize_complexity
 ---
 
 # Coder Skill
@@ -78,6 +79,7 @@ Edit a code file by replacing an exact text block.
 - `file_path`: Absolute path to the file.
 - `old_string`: The exact string to find and replace.
 - `new_string`: The string to replace it with.
+- `dry_run`: If True, only preview changes without writing file (default: False).
 
 ### apply_edit_blocks
 Apply multiple search/replace edits to a file in a single pass. This is PREFERRED over `edit_code_file` for complex changes.
@@ -291,6 +293,12 @@ Returns markdown report of duplicate blocks.
 Generate API documentation for a Python file.
 - `file_path`: Absolute path to the Python file.
 Returns markdown documentation.
+
+### visualize_complexity
+Visualize cyclomatic complexity of functions in a Python file.
+- `file_path`: Absolute path to the Python file.
+- `output_file`: Optional path to save the plot image (PNG). If empty, a temporary file will be created.
+Returns success message with path to generated image, or error description.
 
 ## Usage Strategy: Reliable Code Editing
 

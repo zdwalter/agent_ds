@@ -640,7 +640,9 @@ def search_in_files(folder_path: str, pattern: str) -> str:
 
 
 @mcp.tool()
-def edit_code_file(file_path: str, old_string: str, new_string: str) -> str:
+def edit_code_file(
+    file_path: str, old_string: str, new_string: str, dry_run: bool = False
+) -> str:
     """
     Edit a file by replacing an exact string with a new string.
 
@@ -648,6 +650,7 @@ def edit_code_file(file_path: str, old_string: str, new_string: str) -> str:
         file_path: Absolute path to the file.
         old_string: The exact string to find and replace.
         new_string: The string to replace it with.
+        dry_run: If True, only preview changes without writing file.
     """
     try:
         p = Path(file_path).expanduser().resolve()
@@ -657,16 +660,38 @@ def edit_code_file(file_path: str, old_string: str, new_string: str) -> str:
         content = p.read_text(encoding="utf-8")
 
         if old_string not in content:
-            return "Error: old_string not found in file. Please ensure exact match including whitespace."
+            # Provide context for debugging
+            snippet = content[:500] + ("..." if len(content) > 500 else "")
+            return (
+                "Error: old_string not found in file. Please ensure exact match including whitespace.\n\nFirst 500 characters of file:\n```\n"
+                + snippet
+                + "\n```"
+            )
 
         # Check if multiple occurrences
         if content.count(old_string) > 1:
             return "Error: old_string matches multiple locations. Please Provide more context in old_string to make it unique."
 
         new_content = content.replace(old_string, new_string)
-        p.write_text(new_content, encoding="utf-8")
 
-        return "File updated successfully."
+        if dry_run:
+            import difflib
+
+            diff = difflib.unified_diff(
+                content.splitlines(keepends=True),
+                new_content.splitlines(keepends=True),
+                fromfile="original",
+                tofile="modified",
+                lineterm="",
+            )
+            diff_text = "".join(diff)
+            if diff_text:
+                return f"Dry-run: preview of changes (file not written):\n```diff\n{diff_text}\n```"
+            else:
+                return "Dry-run: No changes would be made (old_string already matches new_string?)."
+        else:
+            p.write_text(new_content, encoding="utf-8")
+            return "File updated successfully."
     except Exception as e:
         return f"Error editing file: {str(e)}"
 
@@ -3267,6 +3292,76 @@ def generate_api_docs(file_path: str) -> str:
     if not sections:
         return "No API elements found."
     return "\n".join(sections)
+
+
+@mcp.tool()
+def visualize_complexity(file_path: str, output_file: str = "") -> str:
+    """
+    Visualize cyclomatic complexity of functions in a Python file.
+
+    Args:
+        file_path: Absolute path to the Python file.
+        output_file: Optional path to save the plot image (PNG). If empty, a temporary file will be created.
+
+    Returns:
+        Success message with path to generated image, or error description.
+    """
+    try:
+        import matplotlib.pyplot as plt
+    except ImportError:
+        return (
+            "Error: matplotlib is not installed. Install with 'pip install matplotlib'."
+        )
+
+    try:
+        from radon.complexity import cc_visit
+    except ImportError:
+        return "Error: radon is not installed. Install with 'pip install radon'."
+
+    import os
+    import tempfile
+    from pathlib import Path
+
+    p = Path(file_path).expanduser().resolve()
+    if not p.exists():
+        return f"Error: File not found: {file_path}"
+    if p.suffix != ".py":
+        return "Error: Only Python files are supported."
+
+    content = p.read_text(encoding="utf-8")
+    blocks = cc_visit(content)
+
+    if not blocks:
+        return "No functions found to analyze."
+
+    # Extract function names and complexities
+    names = []
+    complexities = []
+    for block in blocks:
+        names.append(block.name)
+        complexities.append(block.complexity)
+
+    # Create bar chart
+    plt.figure(figsize=(10, 6))
+    plt.barh(names, complexities, color="skyblue")
+    plt.xlabel("Cyclomatic Complexity")
+    plt.title(f"Function Complexity in {p.name}")
+    plt.gca().invert_yaxis()  # highest on top
+    plt.tight_layout()
+
+    # Determine output file
+    if output_file:
+        out_path = Path(output_file).expanduser().resolve()
+    else:
+        # Create temporary file
+        fd, temp_path = tempfile.mkstemp(suffix=".png", prefix="complexity_")
+        os.close(fd)
+        out_path = Path(temp_path)
+
+    plt.savefig(out_path, dpi=150)
+    plt.close()
+
+    return f"Complexity visualization saved to: {out_path}"
 
 
 if __name__ == "__main__":
