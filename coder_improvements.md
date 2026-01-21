@@ -32,13 +32,17 @@
    - Supports explicit parameter and return variable specification.
    - Useful for refactoring.
 
+8. **Added `inline_variable` tool**
+   - Inlines a variable by replacing its usage with its assignment expression.
+   - Supports optional line number to disambiguate assignments.
+   - Useful for refactoring.
+
 ## Future Improvements (Suggested)
 
 - Add `find_unused_imports` tool (using vulture or static analysis).
 - Add `auto_import` tool to add missing imports.
 - Improve `search_and_replace` with backup creation.
 - Support for more languages (TypeScript, Java, C++).
-- Add `extract_function` and `inline_variable` refactoring tools.
 - Add `code_review` tool using AI.
 
 ## Testing

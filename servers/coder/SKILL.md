@@ -42,6 +42,7 @@ allowed-tools:
   - format_with_ruff
   - format_code
   - extract_function
+  - inline_variable
   - list_functions
 ---
 
@@ -240,6 +241,13 @@ Extract a block of code into a new function.
 - `new_function_name`: Name of the new function.
 - `params`: Comma-separated list of parameter names (optional). If empty, attempt to infer.
 - `return_var`: Name of variable to return (optional). If empty, no return statement.
+Returns success message or error description.
+
+### inline_variable
+Inline a variable by replacing its usage with its assignment expression.
+- `file_path`: Absolute path to the Python file.
+- `variable_name`: Name of the variable to inline.
+- `assignment_line`: Line number of the assignment statement (optional). If 0, the first assignment found in the file will be used.
 Returns success message or error description.
 
 ### list_functions

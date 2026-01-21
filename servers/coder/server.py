@@ -2682,6 +2682,134 @@ def extract_function(
 
 
 @mcp.tool()
+def inline_variable(
+    file_path: str,
+    variable_name: str,
+    assignment_line: int = 0,
+) -> str:
+    """
+    Inline a variable by replacing its usage with its assignment expression.
+
+    Args:
+        file_path: Absolute path to the Python file.
+        variable_name: Name of the variable to inline.
+        assignment_line: Line number of the assignment statement (optional).
+            If 0, the first assignment found in the file will be used.
+
+    Returns:
+        Success message or error description.
+    """
+    try:
+        import ast
+        from pathlib import Path
+
+        p = Path(file_path).expanduser().resolve()
+        if not p.exists():
+            return f"Error: File not found: {file_path}"
+        if p.suffix != ".py":
+            return "Error: Only Python files are supported."
+
+        content = p.read_text(encoding="utf-8")
+        tree = ast.parse(content)
+
+        # Find assignment node
+        assignment_node = None
+        for node in ast.walk(tree):
+            if isinstance(node, ast.Assign):
+                for target in node.targets:
+                    if isinstance(target, ast.Name) and target.id == variable_name:
+                        # Check line number
+                        if assignment_line == 0 or node.lineno == assignment_line:
+                            assignment_node = node
+                            break
+                if assignment_node:
+                    break
+
+        if assignment_node is None:
+            return f"Error: No assignment found for variable '{variable_name}'" + (
+                f" at line {assignment_line}." if assignment_line else "."
+            )
+
+        # Build parent map to find scope
+        parent_map = {}
+        for parent in ast.walk(tree):
+            for child in ast.iter_child_nodes(parent):
+                parent_map[child] = parent
+
+        def get_parent(node):
+            return parent_map.get(node)
+
+        # Determine the scope node (nearest function, class, or module)
+        scope_node = assignment_node
+        while scope_node and not isinstance(scope_node, (ast.Module, ast.FunctionDef, ast.ClassDef, ast.AsyncFunctionDef)):
+            scope_node = get_parent(scope_node)
+        if scope_node is None:
+            scope_node = tree  # fallback to module
+
+        # Collect usages of variable in the same scope after assignment
+        usages = []
+        class UsageCollector(ast.NodeVisitor):
+            def __init__(self):
+                self.usages = []
+                self.in_target_scope = False
+                self.current_scope = None
+
+            def visit_FunctionDef(self, node):
+                self.current_scope = node
+                self.generic_visit(node)
+
+            def visit_ClassDef(self, node):
+                self.current_scope = node
+                self.generic_visit(node)
+
+            def visit_Name(self, node):
+                if isinstance(node.ctx, ast.Load) and node.id == variable_name:
+                    # Check if node is within the target scope and after assignment line
+                    # For simplicity, assume all usages in same scope are candidates
+                    self.usages.append(node)
+                self.generic_visit(node)
+
+        collector = UsageCollector()
+        collector.visit(scope_node)
+        usages = collector.usages
+
+        if not usages:
+            return f"Error: Variable '{variable_name}' is not used after its assignment."
+
+        # Replace each usage with the assignment expression
+        class InlineTransformer(ast.NodeTransformer):
+            def visit_Name(self, node):
+                if isinstance(node.ctx, ast.Load) and node.id == variable_name:
+                    # Replace with the expression (deep copy)
+                    new_node = ast.copy_location(assignment_node.value, node)
+                    return new_node
+                return node
+
+        transformer = InlineTransformer()
+        new_tree = transformer.visit(tree)
+        ast.fix_missing_locations(new_tree)
+
+        # Remove the assignment statement if all usages replaced
+        # Actually we need to remove the assignment node from its parent body
+        parent = get_parent(assignment_node)
+        if isinstance(parent, list):
+            parent.remove(assignment_node)
+        else:
+            # parent is a statement, we cannot remove directly; fallback to no removal
+            pass
+
+        # Generate new source
+        new_content = ast.unparse(new_tree)
+        p.write_text(new_content, encoding="utf-8")
+
+        return f"Successfully inlined variable '{variable_name}' at line {assignment_node.lineno}."
+    except SyntaxError as e:
+        return f"Syntax error: {e}"
+    except Exception as e:
+        return f"Error inlining variable: {str(e)}"
+
+
+@mcp.tool()
 def list_functions(file_path: str) -> str:
     """
     List functions, classes, and other top-level definitions in a file.

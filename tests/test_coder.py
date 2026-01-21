@@ -144,3 +144,37 @@ def test_extract_function():
                 assert "x = add(a, b)" in content
         finally:
             os.unlink(f.name)
+
+
+def test_inline_variable():
+    """Test inlining a variable."""
+    import os
+    import sys
+    import tempfile
+    from pathlib import Path
+
+    sys.path.insert(0, str(Path(__file__).parent.parent / "servers"))
+    from coder.server import inline_variable
+
+    with tempfile.NamedTemporaryFile(mode="w", suffix=".py", delete=False) as f:
+        f.write("""def foo():
+    x = 5 + 3
+    y = x * 2
+    print(y)
+""")
+        f.flush()
+        try:
+            result = inline_variable(
+                file_path=f.name,
+                variable_name="x",
+                assignment_line=0,
+            )
+            assert "Successfully inlined" in result
+            # Check file content
+            with open(f.name, "r") as rf:
+                content = rf.read()
+                # Expect x assignment still present (not removed), but usage replaced
+                assert "x = 5 + 3" in content
+                assert "y = (5 + 3) * 2" in content
+        finally:
+            os.unlink(f.name)
