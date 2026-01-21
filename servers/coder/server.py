@@ -1976,14 +1976,80 @@ def generate_docstring(
             else:
                 return "Error: No functions or classes found in file."
 
+        # Helper function to insert/replace docstring in an AST node
+        def _set_docstring(node, docstring_text):
+            """Insert or replace docstring in the given AST node."""
+            import re
+
+            # Remove triple quotes from start and end
+            # Assumes docstring_text starts and ends with ''' or """
+            match = re.match(r"^(\"{3}|\'{3})(.*?)(\1)$", docstring_text, re.DOTALL)
+            if match:
+                content = match.group(2)
+            else:
+                content = docstring_text  # fallback
+            # Create docstring node
+            # For Python >=3.8, use ast.Constant; for older, ast.Str
+            try:
+                docstring_node = ast.Expr(value=ast.Constant(value=content))
+            except AttributeError:
+                # Fallback for older Python versions (unlikely)
+                docstring_node = ast.Expr(value=ast.Str(s=content))
+            # Ensure node.body exists
+            if not hasattr(node, "body"):
+                return
+            # Find existing docstring (first element if it's a string constant)
+            if (
+                node.body
+                and isinstance(node.body[0], ast.Expr)
+                and isinstance(node.body[0].value, (ast.Constant, ast.Str))
+            ):
+                # Replace
+                node.body[0] = docstring_node
+            else:
+                # Insert at beginning
+                node.body.insert(0, docstring_node)
+
         results = []
         for node in targets:
             # Extract signature and existing docstring
             if isinstance(node, ast.FunctionDef):
-                # TODO: extract arguments, return annotation
-                signature = f"{node.name}(...)"
+                # Extract arguments and return annotation
+                args = node.args
+                arg_parts = []
+                # positional arguments
+                for arg in args.args:
+                    if arg.annotation:
+                        arg_parts.append(f"{arg.arg}: {ast.unparse(arg.annotation)}")
+                    else:
+                        arg_parts.append(arg.arg)
+                # *args
+                if args.vararg:
+                    if args.vararg.annotation:
+                        arg_parts.append(
+                            f"*{args.vararg.arg}: {ast.unparse(args.vararg.annotation)}"
+                        )
+                    else:
+                        arg_parts.append(f"*{args.vararg.arg}")
+                # keyword-only arguments
+                for arg in args.kwonlyargs:
+                    if arg.annotation:
+                        arg_parts.append(f"{arg.arg}: {ast.unparse(arg.annotation)}")
+                    else:
+                        arg_parts.append(arg.arg)
+                # **kwargs
+                if args.kwarg:
+                    if args.kwarg.annotation:
+                        arg_parts.append(
+                            f"**{args.kwarg.arg}: {ast.unparse(args.kwarg.annotation)}"
+                        )
+                    else:
+                        arg_parts.append(f"**{args.kwarg.arg}")
+                signature = f"{node.name}({', '.join(arg_parts)})"
+                if node.returns:
+                    signature += f" -> {ast.unparse(node.returns)}"
             else:
-                signature = node.name
+                signature = node.name  # type: ignore[attr-defined]
 
             # Build prompt
             prompt = f"Generate a {style}-style docstring for the following Python {type(node).__name__} '{signature}'.\n"
@@ -2011,25 +2077,21 @@ def generate_docstring(
                 results.append(f"{signature}:\n{generated}")
             else:
                 # Insert or replace docstring in the AST
-                existing_docstring = ast.get_docstring(node)
-                if existing_docstring is not None:
-                    # Replace docstring
-                    # This is simplified; actual replacement requires AST manipulation
-                    pass
-                else:
-                    # Insert docstring as first element in body
-                    pass
-                # For now, skip actual modification
-                results.append(
-                    f"{signature}: docstring generated (not applied in dry-run)"
-                )
+                _set_docstring(node, generated)
+                results.append(f"{signature}: docstring generated and applied")
 
         if dry_run:
             return "Generated docstrings (dry-run):\n" + "\n\n".join(results)
         else:
             # Write modified content back
-            # TODO: implement AST modification and write
-            return "Docstring generation not yet implemented for non-dry-run."
+            try:
+                new_source = ast.unparse(tree)
+                p.write_text(new_source, encoding="utf-8")
+                return "Generated docstrings applied and file updated:\n" + "\n\n".join(
+                    results
+                )
+            except Exception as e:
+                return f"Error writing file: {str(e)}"
     except ImportError:
         return "Error: openai package not installed. Install with 'pip install openai'."
     except Exception as e:
