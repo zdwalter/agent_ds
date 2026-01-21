@@ -28,6 +28,9 @@ allowed-tools:
   - profile_python_file
   - detect_code_smells
   - batch_format
+  - extract_variable
+  - find_references
+  - auto_fix_lint_issues
   - find_unused_imports
   - remove_unused_imports
   - suggest_imports
@@ -293,6 +296,30 @@ Returns markdown report of duplicate blocks.
 Generate API documentation for a Python file.
 - `file_path`: Absolute path to the Python file.
 Returns markdown documentation.
+
+### extract_variable
+Extract a block of code into a new variable.
+- `file_path`: Absolute path to the Python file.
+- `start_line`: Starting line number (1-based, inclusive).
+- `end_line`: Ending line number (1-based, inclusive).
+- `variable_name`: Name of the new variable.
+- `type_hint`: Optional type hint for the variable (e.g., "List[int]").
+Returns success message or error description.
+
+### find_references
+Find references to a symbol in a project.
+- `project_path`: Root directory of the project.
+- `symbol`: Symbol name to search for.
+- `symbol_type`: Type of symbol ('function', 'class', 'variable', 'any').
+- `file_pattern`: File pattern to search (default "*.py").
+Returns markdown list of references with file paths and line numbers.
+
+### auto_fix_lint_issues
+Automatically fix lint issues using specified linter.
+- `file_path`: Path to the file or directory to lint.
+- `linter`: Linter to use ('ruff', 'black', 'isort').
+- `apply_fix`: If True, apply fixes; otherwise, only report issues.
+Returns summary of fixes applied or issues found.
 
 ### visualize_complexity
 Visualize cyclomatic complexity of functions in a Python file.

@@ -3295,6 +3295,201 @@ def generate_api_docs(file_path: str) -> str:
 
 
 @mcp.tool()
+def extract_variable(
+    file_path: str,
+    start_line: int,
+    end_line: int,
+    variable_name: str,
+    type_hint: str = "",
+) -> str:
+    """
+    Extract a block of code into a new variable.
+
+    Args:
+        file_path: Absolute path to the Python file.
+        start_line: Starting line number (1-based, inclusive).
+        end_line: Ending line number (1-based, inclusive).
+        variable_name: Name of the new variable.
+        type_hint: Optional type hint for the variable (e.g., "List[int]").
+
+    Returns:
+        Success message or error description.
+    """
+    try:
+        from pathlib import Path
+
+        p = Path(file_path).expanduser().resolve()
+        if not p.exists():
+            return f"Error: File not found: {file_path}"
+        if p.suffix != ".py":
+            return "Error: Only Python files are supported."
+
+        content = p.read_text(encoding="utf-8")
+        lines = content.splitlines()
+
+        if start_line < 1 or end_line > len(lines) or start_line > end_line:
+            return f"Error: Invalid line numbers. File has {len(lines)} lines."
+
+        # Extract block
+        block_lines = lines[start_line - 1 : end_line]
+        if not block_lines:
+            return "Error: Empty code block."
+
+        # Determine indentation
+        indent = _detect_indent(block_lines)
+        # Remove common indentation from block lines to get expression
+        dedented_lines = []
+        for line in block_lines:
+            if line.strip():
+                dedented_lines.append(line[indent:])
+            else:
+                dedented_lines.append("")
+
+        expression = "\n".join(dedented_lines).rstrip()
+        if not expression:
+            return "Error: Expression is empty after dedenting."
+
+        # Build assignment
+        if type_hint:
+            assignment = f"{variable_name}: {type_hint} = {expression}"
+        else:
+            assignment = f"{variable_name} = {expression}"
+
+        # Apply changes: replace block with assignment, keep original indentation
+        new_lines = lines[: start_line - 1] + [assignment] + lines[end_line:]
+        new_content = "\n".join(new_lines)
+        p.write_text(new_content, encoding="utf-8")
+
+        return f"Successfully extracted lines {start_line}-{end_line} into variable {variable_name}."
+    except SyntaxError as e:
+        return f"Syntax error: {e}"
+    except Exception as e:
+        return f"Error extracting variable: {str(e)}"
+
+
+@mcp.tool()
+def find_references(
+    project_path: str,
+    symbol: str,
+    symbol_type: str = "any",
+    file_pattern: str = "*.py",
+) -> str:
+    """
+    Find references to a symbol in a project.
+
+    Args:
+        project_path: Root directory of the project.
+        symbol: Symbol name to search for.
+        symbol_type: Type of symbol ('function', 'class', 'variable', 'any').
+        file_pattern: File pattern to search (default "*.py").
+
+    Returns:
+        Markdown list of references with file paths and line numbers.
+    """
+    try:
+        import fnmatch
+        import subprocess
+        from pathlib import Path
+
+        p = Path(project_path).expanduser().resolve()
+        if not p.exists():
+            return f"Error: Project path not found: {project_path}"
+        if not p.is_dir():
+            return f"Error: Project path is not a directory: {project_path}"
+
+        # Use grep to search for symbol with word boundaries
+        cmd = [
+            "grep",
+            "-n",
+            "-r",
+            "--include=" + file_pattern,
+            "-w",
+            symbol,
+            str(p),
+        ]
+        result = subprocess.run(cmd, capture_output=True, text=True)
+        lines = result.stdout.strip().split("\n")
+        if not lines or lines[0] == "":
+            return f"No references found for symbol '{symbol}'."
+
+        # Format results
+        refs = []
+        for line in lines:
+            # grep output format: file:line:content
+            parts = line.split(":", 2)
+            if len(parts) >= 3:
+                file, lineno, content = parts
+                refs.append(f"- `{file}` line {lineno}: `{content.strip()}`")
+
+        return "## References found:\n\n" + "\n".join(refs)
+    except FileNotFoundError:
+        return "Error: grep command not found. This tool requires grep installed."
+    except Exception as e:
+        return f"Error finding references: {str(e)}"
+
+
+@mcp.tool()
+def auto_fix_lint_issues(
+    file_path: str,
+    linter: str = "ruff",
+    apply_fix: bool = True,
+) -> str:
+    """
+    Automatically fix lint issues using specified linter.
+
+    Args:
+        file_path: Path to the file or directory to lint.
+        linter: Linter to use ('ruff', 'black', 'isort').
+        apply_fix: If True, apply fixes; otherwise, only report issues.
+
+    Returns:
+        Summary of fixes applied or issues found.
+    """
+    try:
+        import subprocess
+        from pathlib import Path
+
+        p = Path(file_path).expanduser().resolve()
+        if not p.exists():
+            return f"Error: Path not found: {file_path}"
+
+        if linter == "ruff":
+            cmd = ["ruff", "check", "--fix"] if apply_fix else ["ruff", "check"]
+            cmd.append(str(p))
+        elif linter == "black":
+            if apply_fix:
+                cmd = ["black", str(p)]
+            else:
+                cmd = ["black", "--check", str(p)]
+        elif linter == "isort":
+            if apply_fix:
+                cmd = ["isort", str(p)]
+            else:
+                cmd = ["isort", "--check", str(p)]
+        else:
+            return f"Error: Unsupported linter '{linter}'. Choose from 'ruff', 'black', 'isort'."
+
+        result = subprocess.run(cmd, capture_output=True, text=True)
+        if result.returncode == 0:
+            if apply_fix:
+                return f"Successfully applied {linter} fixes to {file_path}."
+            else:
+                return f"No issues found by {linter} (check passed)."
+        else:
+            # Some linters return non-zero when issues are found (even after fixing)
+            output = result.stdout + result.stderr
+            if apply_fix:
+                # Ruff may have fixed some issues, but others remain
+                return f"{linter} completed with output:\n{output}"
+            else:
+                return f"{linter} found issues:\n{output}"
+    except FileNotFoundError as e:
+        return f"Error: Linter '{linter}' not installed. Please install it (pip install {linter})."
+    except Exception as e:
+        return f"Error running linter: {str(e)}"
+
+
+@mcp.tool()
 def visualize_complexity(file_path: str, output_file: str = "") -> str:
     """
     Visualize cyclomatic complexity of functions in a Python file.
