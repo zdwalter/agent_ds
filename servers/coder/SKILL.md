@@ -29,6 +29,8 @@ allowed-tools:
   - detect_code_smells
   - batch_format
   - find_unused_imports
+  - remove_unused_imports
+  - suggest_imports
   - generate_unit_tests
   - code_stats
   - code_review

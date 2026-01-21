@@ -665,7 +665,10 @@ def generate_code(prompt: str, language: str = "python") -> str:
             temperature=0.2,
             max_tokens=1000,
         )
-        generated = response.choices[0].message.content.strip()
+        content = response.choices[0].message.content  # type: ignore
+        if content is None:
+            return "Error: No content generated."
+        generated = content.strip()
         return f"Generated code ({language}):\n```{language}\n{generated}\n```"
     except ImportError:
         return "Error: openai package not installed. Install with 'pip install openai'."
@@ -994,7 +997,7 @@ def ai_suggest_code(prompt: str, code: str = "", language: str = "python") -> st
         # Call OpenAI API
         response = openai.chat.completions.create(
             model="gpt-4-turbo-preview",
-            messages=messages,
+            messages=messages,  # type: ignore
             temperature=0.7,
             max_tokens=1000,
         )
@@ -1354,6 +1357,177 @@ def find_unused_imports(file_path: str) -> str:
 
 
 @mcp.tool()
+def remove_unused_imports(file_path: str) -> str:
+    """
+    Remove unused imports from a Python file.
+
+    Args:
+        file_path: Absolute path to the Python file.
+
+    Returns:
+        Summary of removed imports or success message.
+    """
+    try:
+        import ast
+        import builtins
+        from pathlib import Path
+
+        p = Path(file_path).expanduser().resolve()
+        if not p.exists():
+            return f"Error: File not found: {file_path}"
+        if p.suffix != ".py":
+            return "Error: Only Python files are supported."
+
+        content = p.read_text(encoding="utf-8")
+        tree = ast.parse(content)
+
+        # Map each import node to its imported names
+        import_info = []  # list of (node, names list)
+        for node in ast.walk(tree):
+            if isinstance(node, ast.Import):
+                names = [alias.name for alias in node.names]
+                import_info.append((node, names))
+            elif isinstance(node, ast.ImportFrom):
+                if node.module:
+                    names = [alias.name for alias in node.names]
+                    import_info.append((node, names))  # type: ignore
+                else:
+                    # from . import something
+                    import_info.append((node, []))  # type: ignore
+
+        # Collect used names
+        used_names = set()
+        for node in ast.walk(tree):
+            if isinstance(node, ast.Name) and isinstance(node.ctx, ast.Load):
+                used_names.add(node.id)
+        used_names -= set(dir(builtins))
+
+        # Determine which import nodes to keep
+        removed_names = []
+        kept_nodes = []
+        for node, names in import_info:
+            # if any name is used, keep the whole import node
+            if any(name in used_names for name in names):
+                kept_nodes.append(node)
+            else:
+                removed_names.extend(names)
+
+        if not removed_names:
+            return "No unused imports found."
+
+        # Create new module body filtering out removed nodes (top‑level only)
+        new_body = []
+        for item in tree.body:
+            remove = False
+            for node, names in import_info:
+                if item is node and not any(name in used_names for name in names):
+                    remove = True
+                    break
+            if not remove:
+                new_body.append(item)
+
+        new_tree = ast.Module(body=new_body, type_ignores=[])
+        new_content = ast.unparse(new_tree)
+        p.write_text(new_content)
+
+        lines = ["## Removed Unused Imports", ""]
+        for name in sorted(set(removed_names)):
+            lines.append(f"- `{name}`")
+        lines.append(f"\nFile updated successfully.")
+        return "\n".join(lines)
+    except SyntaxError as e:
+        return f"Syntax error in file: {e}"
+    except Exception as e:
+        return f"Error analyzing imports: {str(e)}"
+
+
+@mcp.tool()
+def suggest_imports(file_path: str) -> str:
+    """
+    Detect missing imports in a Python file and suggest import statements.
+
+    Args:
+        file_path: Absolute path to the Python file.
+
+    Returns:
+        Markdown list of suggested imports or success message.
+    """
+    try:
+        import ast
+        import importlib.util
+        import sys
+        from pathlib import Path
+
+        p = Path(file_path).expanduser().resolve()
+        if not p.exists():
+            return f"Error: File not found: {file_path}"
+        if p.suffix != ".py":
+            return "Error: Only Python files are supported."
+
+        content = p.read_text(encoding="utf-8")
+        tree = ast.parse(content)
+
+        # Collect all names used in the code
+        used_names = set()
+        for node in ast.walk(tree):
+            if isinstance(node, ast.Name) and isinstance(node.ctx, ast.Load):
+                used_names.add(node.id)
+
+        # Remove builtins
+        import builtins
+
+        builtin_names = set(dir(builtins))
+        used_names -= builtin_names
+
+        # Remove names that are already imported
+        imported_names = set()
+        for node in ast.walk(tree):
+            if isinstance(node, ast.Import):
+                for alias in node.names:
+                    imported_names.add(alias.name)
+                    if alias.asname:
+                        imported_names.add(alias.asname)
+            elif isinstance(node, ast.ImportFrom):
+                if node.module:
+                    for alias in node.names:
+                        imported_names.add(alias.name)
+                        if alias.asname:
+                            imported_names.add(alias.asname)
+        used_names -= imported_names
+
+        if not used_names:
+            return "No missing imports detected."
+
+        # Try to find which names correspond to importable modules
+        suggestions = []
+        for name in sorted(used_names):
+            # Check if it's a standard library module
+            if hasattr(sys, "stdlib_module_names"):
+                if name in sys.stdlib_module_names:
+                    suggestions.append(f"import {name}")
+                    continue
+            # Try to find spec
+            spec = importlib.util.find_spec(name)
+            if spec is not None:
+                suggestions.append(f"import {name}")
+                continue
+            # Could be from a submodule (e.g., pandas.DataFrame)
+            # We'll skip for now
+
+        if not suggestions:
+            return "Could not find importable modules for the missing names."
+
+        lines = ["## Suggested Imports", ""]
+        lines.extend(f"- `{s}`" for s in suggestions)
+        lines.append("\nAdd these import statements at the top of the file.")
+        return "\n".join(lines)
+    except SyntaxError as e:
+        return f"Syntax error in file: {e}"
+    except Exception as e:
+        return f"Error analyzing imports: {str(e)}"
+
+
+@mcp.tool()
 def generate_unit_tests(file_path: str, function_name: Optional[str] = None) -> str:
     """
     Generate unit tests for functions in a Python file using OpenAI.
@@ -1401,7 +1575,10 @@ def generate_unit_tests(file_path: str, function_name: Optional[str] = None) -> 
             temperature=0.2,
             max_tokens=1000,
         )
-        generated = response.choices[0].message.content.strip()
+        content = response.choices[0].message.content  # type: ignore
+        if content is None:
+            return "Error: No content generated."
+        generated = content.strip()
         return f"Generated unit tests:\n```python\n{generated}\n```"
     except ImportError:
         return "Error: openai package not installed. Install with 'pip install openai'."
