@@ -353,7 +353,7 @@ def edit_code_file(file_path: str, old_string: str, new_string: str) -> str:
 
 
 @mcp.tool()
-def apply_edit_blocks(file_path: str, edits: str) -> str:
+def apply_edit_blocks(file_path: str, edits: str, dry_run: bool = False) -> str:
     """
     Apply multiple search/replace edits to a file using the following format:
 
@@ -366,6 +366,7 @@ def apply_edit_blocks(file_path: str, edits: str) -> str:
     Args:
         file_path: Absolute path to the file.
         edits: A string containing one or more edit blocks.
+        dry_run: If True, only preview changes without writing file.
     """
     try:
         p = Path(file_path).expanduser().resolve()
@@ -405,8 +406,25 @@ def apply_edit_blocks(file_path: str, edits: str) -> str:
                 # Provide more helpful error message
                 return f"Error applying edits: Resulting Python file has syntax error: {syn_err}. Changes were not applied."
 
-        p.write_text(new_content, encoding="utf-8")
-        return f"Successfully applied {len(changes)} edits to {p.name}."
+        if dry_run:
+            # Compute diff
+            import difflib
+
+            diff = difflib.unified_diff(
+                content.splitlines(keepends=True),
+                new_content.splitlines(keepends=True),
+                fromfile="original",
+                tofile="modified",
+                lineterm="",
+            )
+            diff_text = "".join(diff)
+            if diff_text:
+                return f"Dry-run: preview of changes (file not written):\n```diff\n{diff_text}\n```"
+            else:
+                return "Dry-run: No changes would be made (SEARCH block already matches REPLACE block?)."
+        else:
+            p.write_text(new_content, encoding="utf-8")
+            return f"Successfully applied {len(changes)} edits to {p.name}."
 
     except Exception as e:
         return f"Error applying edits: {str(e)}"

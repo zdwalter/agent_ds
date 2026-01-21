@@ -67,6 +67,7 @@ Edit a code file by replacing an exact text block.
 Apply multiple search/replace edits to a file in a single pass. This is PREFERRED over `edit_code_file` for complex changes.
 - `file_path`: Absolute path to the file.
 - `edits`: A string containing one or more edit blocks using the SEARCH/REPLACE format.
+- `dry_run`: If True, only preview changes without writing file (default: False).
 
 ### create_file
 Create a new file with optional content, overwrite existing file, or append.
