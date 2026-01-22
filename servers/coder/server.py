@@ -1213,6 +1213,31 @@ def search_and_replace(
             lines = ["## Files that would be modified (dry run):", ""]
             for file_path in matched_files:
                 lines.append(f"- `{file_path}`")
+                try:
+                    content = file_path.read_text(encoding="utf-8", errors="replace")
+                    matches = list(regex.finditer(content))
+                    if matches:
+                        lines.append(f"  Matches: {len(matches)}")
+                        # Show up to 3 matches with surrounding lines
+                        for i, match in enumerate(matches[:3]):
+                            start = match.start()
+                            end = match.end()
+                            # Find line numbers
+                            line_start = content[:start].count("\n") + 1
+                            # Extract the line containing the match
+                            lines_content = content.splitlines()
+                            line_idx = line_start - 1
+                            before = max(0, line_idx - 1)
+                            after = min(len(lines_content), line_idx + 2)
+                            snippet = "\n".join(lines_content[before:after])
+                            lines.append(f"  Match {i+1} (line {line_start}):")
+                            lines.append(f"    ```")
+                            lines.append(f"    {snippet}")
+                            lines.append(f"    ```")
+                        if len(matches) > 3:
+                            lines.append(f"  ... and {len(matches) - 3} more matches.")
+                except Exception as e:
+                    lines.append(f"  Error reading file: {e}")
             return "\n".join(lines)
 
         # Perform replacement

@@ -113,3 +113,16 @@ The improvements are already applied to the source code. The skill needs to be r
    - All existing tests continue to pass.
 
 These improvements extend the coder skill's capabilities in code intelligence and style enforcement.
+
+## New Improvements (2026-01-22) - Round 3
+
+1. **Enhanced `search_and_replace` dry‑run output**
+   - When `dry_run=True`, the tool now shows the number of matches per file and a preview of the first three matches with surrounding lines.
+   - This helps the user verify that the regex matches the expected code before applying the replacement.
+   - The preview includes line numbers and a short code snippet (2 lines of context).
+
+2. **Improved error handling**
+   - Added try‑except around file reading to avoid crashing the entire tool when a single file cannot be read.
+   - Error messages are included in the dry‑run output, allowing the user to see which files caused problems.
+
+These enhancements make the `search_and_replace` tool more informative and safer to use.
