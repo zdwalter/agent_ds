@@ -95,3 +95,21 @@ generate_unit_tests("/path/to/file.py", "my_function")
 ## Notes
 
 The improvements are already applied to the source code. The skill needs to be reloaded for the changes to take effect (or restart the agent).
+## New Improvements (2026-01-22) - Round 2
+
+1. **Added `code_completion` tool**
+   - Provides code completion suggestions based on identifiers in the file.
+   - Uses AST parsing to collect variable, function, and class names.
+   - Optional prefix filtering.
+
+2. **Added `code_style_check` tool**
+   - Checks code style using black and isort.
+   - Runs `black --check --diff` and `isort --check-only --diff` to detect formatting and import sorting issues.
+   - Returns a unified report.
+
+3. **Enhanced documentation and testing**
+   - Updated SKILL.md with new tool entries and documentation.
+   - Added unit tests for both new tools (test_code_completion, test_code_style_check).
+   - All existing tests continue to pass.
+
+These improvements extend the coder skill's capabilities in code intelligence and style enforcement.

@@ -14,6 +14,8 @@ allowed-tools:
   - analyze_code_complexity
   - lint_python_file
   - generate_code
+  - code_completion
+  - code_style_check
   - search_and_replace
   - git_status
   - git_diff
@@ -126,6 +128,15 @@ Search for a pattern in files with advanced options.
 Generate code based on a natural language prompt using OpenAI.
 - `prompt`: Natural language description of the code to generate.
 - `language`: Programming language (default: "python").
+
+### code_completion
+Provide code completion suggestions based on identifiers in the file.
+- `file_path`: Path to the source file.
+- `prefix`: Optional prefix to filter suggestions.
+
+### code_style_check
+Check code style using black and isort.
+- `file_path`: Path to the Python file.
 
 ### git_status
 Show git status of a repository.

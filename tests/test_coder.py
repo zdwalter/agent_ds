@@ -8,8 +8,11 @@ from pathlib import Path
 # Add servers to path
 sys.path.insert(0, str(Path(__file__).parent.parent / "servers"))
 
-from coder.server import (_analyze_python_file, detect_code_smells,
-                          investigate_and_save_report)
+from coder.server import (
+    _analyze_python_file,
+    detect_code_smells,
+    investigate_and_save_report,
+)
 
 
 def test_analyze_python_file():
@@ -176,5 +179,66 @@ def test_inline_variable():
                 # Expect x assignment still present (not removed), but usage replaced
                 assert "x = 5 + 3" in content
                 assert "y = (5 + 3) * 2" in content
+        finally:
+            os.unlink(f.name)
+
+
+def test_code_completion():
+    """Test code completion suggestions."""
+    import os
+    import sys
+    import tempfile
+    from pathlib import Path
+
+    sys.path.insert(0, str(Path(__file__).parent.parent / "servers"))
+    from coder.server import code_completion
+
+    with tempfile.NamedTemporaryFile(mode="w", suffix=".py", delete=False) as f:
+        f.write("""def foo():
+    x = 5
+    y = 10
+    z = x + y
+    print(z)
+
+class MyClass:
+    def method(self):
+        pass
+""")
+        f.flush()
+        try:
+            result = code_completion(f.name, "")
+            assert "Suggestions:" in result
+            assert "- foo" in result
+            assert "- MyClass" in result
+            # Test with prefix
+            result2 = code_completion(f.name, "m")
+            assert "method" in result2 or "MyClass" in result2
+        finally:
+            os.unlink(f.name)
+
+
+def test_code_style_check():
+    """Test code style checking."""
+    import os
+    import sys
+    import tempfile
+    from pathlib import Path
+
+    sys.path.insert(0, str(Path(__file__).parent.parent / "servers"))
+    from coder.server import code_style_check
+
+    with tempfile.NamedTemporaryFile(mode="w", suffix=".py", delete=False) as f:
+        f.write("""import sys, os
+def foo():
+    x=5
+    y = 10
+    return x+y
+""")
+        f.flush()
+        try:
+            result = code_style_check(f.name)
+            # Should contain at least Black or Isort issues
+            assert "Black" in result
+            assert "Isort" in result
         finally:
             os.unlink(f.name)

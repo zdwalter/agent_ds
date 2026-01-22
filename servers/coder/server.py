@@ -1021,6 +1021,128 @@ def generate_code(prompt: str, language: str = "python") -> str:
 
 
 @mcp.tool()
+def code_completion(file_path: str, prefix: str = "") -> str:
+    """
+    Provide code completion suggestions based on identifiers in the file.
+
+    Args:
+        file_path: Path to the source file.
+        prefix: Optional prefix to filter suggestions.
+
+    Returns:
+        A list of suggested identifiers.
+    """
+    try:
+        import ast
+        from pathlib import Path
+
+        p = Path(file_path).expanduser().resolve()
+        if not p.exists():
+            return f"Error: File not found: {file_path}"
+
+        content = p.read_text(encoding="utf-8", errors="replace")
+        tree = ast.parse(content)
+        identifiers = set()
+
+        # Collect identifiers from AST nodes
+        for node in ast.walk(tree):
+            if isinstance(node, ast.Name):
+                identifiers.add(node.id)
+            elif isinstance(node, ast.FunctionDef):
+                identifiers.add(node.name)
+            elif isinstance(node, ast.ClassDef):
+                identifiers.add(node.name)
+            elif isinstance(node, ast.Attribute):
+                # For attribute access, we could add attr but skip for simplicity
+                pass
+
+        # Filter by prefix
+        if prefix:
+            suggestions = [id for id in identifiers if id.startswith(prefix)]
+        else:
+            suggestions = list(identifiers)
+
+        suggestions.sort()
+        if not suggestions:
+            return "No suggestions found."
+        return "Suggestions:\n" + "\n".join(f"- {s}" for s in suggestions)
+    except Exception as e:
+        return f"Error in code_completion: {str(e)}"
+
+
+@mcp.tool()
+def code_style_check(file_path: str) -> str:
+    """
+    Check code style using black and isort.
+
+    Args:
+        file_path: Path to the Python file.
+
+    Returns:
+        A report of style issues (formatting, import sorting).
+    """
+    try:
+        import subprocess
+        import sys
+        from pathlib import Path
+
+        p = Path(file_path).expanduser().resolve()
+        if not p.exists():
+            return f"Error: File not found: {file_path}"
+        if not p.is_file():
+            return f"Error: Path is not a file: {file_path}"
+
+        issues = []
+
+        # Black formatting check
+        try:
+            result = subprocess.run(
+                [sys.executable, "-m", "black", "--check", "--diff", str(p)],
+                capture_output=True,
+                text=True,
+                timeout=10,
+            )
+            if result.returncode != 0:
+                # Black would reformat the file
+                if result.stdout:
+                    issues.append("Black formatting issues:\n" + result.stdout)
+                else:
+                    issues.append("Black: file would be reformatted.")
+            else:
+                issues.append("Black: OK (no formatting issues).")
+        except subprocess.TimeoutExpired:
+            issues.append("Black check timed out.")
+        except Exception as e:
+            issues.append(f"Black error: {e}")
+
+        # Isort import sorting check
+        try:
+            result = subprocess.run(
+                [sys.executable, "-m", "isort", "--check-only", "--diff", str(p)],
+                capture_output=True,
+                text=True,
+                timeout=10,
+            )
+            if result.returncode != 0:
+                if result.stdout:
+                    issues.append("Isort import sorting issues:\n" + result.stdout)
+                else:
+                    issues.append("Isort: imports would be reordered.")
+            else:
+                issues.append("Isort: OK (imports are properly sorted).")
+        except subprocess.TimeoutExpired:
+            issues.append("Isort check timed out.")
+        except Exception as e:
+            issues.append(f"Isort error: {e}")
+
+        if not issues:
+            return "No style issues found."
+        return "\n\n".join(issues)
+    except Exception as e:
+        return f"Error in code_style_check: {str(e)}"
+
+
+@mcp.tool()
 def search_and_replace(
     folder_path: str,
     search_pattern: str,
