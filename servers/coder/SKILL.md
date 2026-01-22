@@ -52,6 +52,7 @@ allowed-tools:
   - list_functions
   - detect_duplicate_code
   - generate_api_docs
+  - assess_code_quality
   - visualize_complexity
 ---
 
@@ -320,6 +321,12 @@ Automatically fix lint issues using specified linter.
 - `linter`: Linter to use ('ruff', 'black', 'isort').
 - `apply_fix`: If True, apply fixes; otherwise, only report issues.
 Returns summary of fixes applied or issues found.
+
+### assess_code_quality
+Assess the quality of a Python file by analyzing complexity, duplication,
+static analysis issues, and security vulnerabilities.
+- `file_path`: Absolute path to the Python file.
+Returns a markdown report with metrics and suggestions.
 
 ### visualize_complexity
 Visualize cyclomatic complexity of functions in a Python file.

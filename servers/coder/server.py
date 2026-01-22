@@ -3490,6 +3490,165 @@ def auto_fix_lint_issues(
 
 
 @mcp.tool()
+def assess_code_quality(file_path: str) -> str:
+    """
+    Assess the quality of a Python file by analyzing complexity, duplication,
+    static analysis issues, and security vulnerabilities.
+
+    Args:
+        file_path: Absolute path to the Python file.
+
+    Returns:
+        A markdown report with metrics and suggestions.
+    """
+    import subprocess
+    import tempfile
+    from pathlib import Path
+
+    p = Path(file_path).expanduser().resolve()
+    if not p.exists():
+        return f"Error: File not found: {file_path}"
+    if p.suffix != ".py":
+        return "Error: Only Python files are supported."
+
+    report_lines = [f"# Code Quality Assessment for {p.name}", ""]
+
+    # 1. Cyclomatic complexity
+    try:
+        from radon.complexity import cc_visit
+
+        content = p.read_text(encoding="utf-8")
+        blocks = cc_visit(content)
+        if blocks:
+            avg_complexity = sum(b.complexity for b in blocks) / len(blocks)
+            high_complexity = [b for b in blocks if b.complexity > 10]
+            report_lines.append("## Cyclomatic Complexity")
+            report_lines.append(f"- Average complexity: {avg_complexity:.2f}")
+            report_lines.append(f"- Functions/classes analyzed: {len(blocks)}")
+            report_lines.append(
+                f"- High complexity (>10) items: {len(high_complexity)}"
+            )
+            if high_complexity:
+                report_lines.append("  - " + ", ".join(b.name for b in high_complexity))
+        else:
+            report_lines.append("## Cyclomatic Complexity")
+            report_lines.append("- No functions/classes found.")
+    except ImportError:
+        report_lines.append("## Cyclomatic Complexity")
+        report_lines.append("- radon not installed; complexity analysis skipped.")
+
+    # 2. Code smells (using existing tool)
+    try:
+        smells = detect_code_smells(file_path, cc_threshold=10, loc_threshold=50)
+        # The tool returns a markdown report; extract the relevant part
+        if "No code smells detected" not in smells:
+            report_lines.append("## Code Smells")
+            # Add a summary line
+            lines = smells.split("\n")
+            smell_count = sum(
+                1 for line in lines if line.startswith("|") and "high" in line.lower()
+            )
+            report_lines.append(f"- Potential code smells: {smell_count}")
+            report_lines.append("- Detailed report:")
+            report_lines.extend("  " + line for line in lines[:10])
+        else:
+            report_lines.append("## Code Smells")
+            report_lines.append("- No code smells detected.")
+    except Exception as e:
+        report_lines.append("## Code Smells")
+        report_lines.append(f"- Error analyzing smells: {e}")
+
+    # 3. Static analysis (code_review)
+    try:
+        review = code_review(file_path)
+        # The review contains output from pylint, flake8, bandit
+        # Count lines that look like issues
+        lines = review.split("\n")
+        issue_count = 0
+        for line in lines:
+            if (
+                line.strip()
+                and not line.startswith("===")
+                and not line.startswith("Error")
+            ):
+                # Heuristic: lines containing colon or error codes
+                if ":" in line and (
+                    "error" in line.lower()
+                    or "warning" in line.lower()
+                    or "C" in line
+                    or "W" in line
+                    or "E" in line
+                ):
+                    issue_count += 1
+        report_lines.append("## Static Analysis")
+        report_lines.append(f"- Total issues found: {issue_count}")
+        if issue_count > 0:
+            report_lines.append("- Sample issues:")
+            for line in lines[:5]:
+                if line.strip():
+                    report_lines.append(f"  - {line}")
+    except Exception as e:
+        report_lines.append("## Static Analysis")
+        report_lines.append(f"- Error running static analysis: {e}")
+
+    # 4. Security scan (bandit)
+    try:
+        security = security_scan(file_path)
+        lines = security.split("\n")
+        vuln_count = 0
+        for line in lines:
+            if "Issue" in line or "Severity" in line:
+                vuln_count += 1
+        report_lines.append("## Security Scan")
+        report_lines.append(f"- Potential vulnerabilities: {vuln_count}")
+        if vuln_count > 0:
+            report_lines.append("- Sample findings:")
+            for line in lines[:3]:
+                if line.strip():
+                    report_lines.append(f"  - {line}")
+    except Exception as e:
+        report_lines.append("## Security Scan")
+        report_lines.append(f"- Error running security scan: {e}")
+
+    # 5. Duplicate code detection (within the same file)
+    try:
+        # Use detect_duplicate_code with a temporary directory containing only this file
+        import shutil
+        import tempfile
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tmpfile = Path(tmpdir) / p.name
+            shutil.copy2(p, tmpfile)
+            dup_report = detect_duplicate_code(tmpdir, file_pattern="*.py", min_lines=5)
+            if "No duplicate code blocks found" not in dup_report:
+                # Count duplicate blocks
+                lines = dup_report.split("\n")
+                dup_blocks = sum(
+                    1 for line in lines if line.startswith("## Duplicate block")
+                )
+                report_lines.append("## Duplicate Code")
+                report_lines.append(f"- Duplicate blocks: {dup_blocks}")
+            else:
+                report_lines.append("## Duplicate Code")
+                report_lines.append("- No duplicate code blocks detected.")
+    except Exception as e:
+        report_lines.append("## Duplicate Code")
+        report_lines.append(f"- Error checking duplicates: {e}")
+
+    # 6. Overall score (simplistic)
+    # Placeholder: compute a score based on the above metrics
+    report_lines.append("## Overall Assessment")
+    report_lines.append(
+        "- This is a qualitative summary; consider addressing high complexity, code smells, and security issues first."
+    )
+    report_lines.append(
+        "- For quantitative metrics, run dedicated tools (e.g., `pylint`, `bandit`, `radon`)."
+    )
+
+    return "\n".join(report_lines)
+
+
+@mcp.tool()
 def visualize_complexity(file_path: str, output_file: str = "") -> str:
     """
     Visualize cyclomatic complexity of functions in a Python file.

@@ -85,6 +85,13 @@ generate_unit_tests("/path/to/file.py", "my_function")
    - Parameters: `file_path`.
    - Returns markdown documentation.
 
+## New Improvements (2026-01-22)
+
+1. **Added `assess_code_quality` tool**
+   - Assesses the quality of a Python file by analyzing complexity, duplication, static analysis issues, and security vulnerabilities.
+   - Parameters: `file_path` (absolute path to the Python file).
+   - Returns a markdown report with metrics and suggestions.
+
 ## Notes
 
 The improvements are already applied to the source code. The skill needs to be reloaded for the changes to take effect (or restart the agent).
