@@ -1021,6 +1021,70 @@ def generate_code(prompt: str, language: str = "python") -> str:
 
 
 @mcp.tool()
+def code_snippet_generate(
+    snippet_type: str,
+    language: str = "python",
+    prompt: str = "",
+) -> str:
+    """
+    Generate a code snippet of a given type.
+
+    Args:
+        snippet_type: Type of snippet (e.g., "for_loop", "if_statement", "try_except",
+                     "function_def", "class_def", "list_comprehension",
+                     "dictionary_comprehension", "context_manager").
+        language: Programming language (default "python").
+        prompt: Optional natural‑language description of the desired snippet.
+                If empty, a generic snippet of the given type will be generated.
+
+    Returns:
+        Generated code snippet or error message.
+    """
+    try:
+        import os
+
+        import openai
+
+        api_key = os.environ.get("OPENAI_API_KEY")
+        if not api_key:
+            return "Error: OPENAI_API_KEY environment variable not set."
+
+        # Build system message based on snippet type
+        system_content = (
+            f"You are a code‑snippet generator. Generate a concise {snippet_type} snippet in {language}. "
+            "Provide only the code, no explanations, no markdown formatting, no surrounding backticks."
+        )
+        user_content = (
+            prompt if prompt else f"Generate a {snippet_type} snippet in {language}."
+        )
+
+        client = openai.OpenAI(api_key=api_key)
+        response = client.chat.completions.create(
+            model="gpt-4o-mini",
+            messages=[
+                {"role": "system", "content": system_content},
+                {"role": "user", "content": user_content},
+            ],
+            temperature=0.2,
+            max_tokens=500,
+        )
+        content = response.choices[0].message.content  # type: ignore
+        if content is None:
+            return "Error: No content generated."
+        generated = content.strip()
+        # Remove surrounding backticks if present
+        if generated.startswith("```"):
+            lines = generated.splitlines()
+            if len(lines) >= 2 and lines[0].startswith("```"):
+                generated = "\n".join(lines[1:-1])
+        return f"Generated {snippet_type} snippet ({language}):\n```{language}\n{generated}\n```"
+    except ImportError:
+        return "Error: openai package not installed. Install with 'pip install openai'."
+    except Exception as e:
+        return f"Error generating snippet: {str(e)}"
+
+
+@mcp.tool()
 def code_completion(file_path: str, prefix: str = "") -> str:
     """
     Provide code completion suggestions based on identifiers in the file.
@@ -1151,6 +1215,8 @@ def search_and_replace(
     dry_run: bool = False,
     keep_backup: bool = False,
     max_files: Optional[int] = None,
+    parallel: bool = False,
+    workers: Optional[int] = None,
 ) -> str:
     """
     Search and replace across multiple files using pure Python (no grep/sed).
@@ -1163,14 +1229,18 @@ def search_and_replace(
         dry_run: If True, only show which files would be changed.
         keep_backup: If True, keep backup files (.bak) after replacement.
         max_files: Maximum number of files to process (optional).
+        parallel: If True, perform replacement in parallel using multiple threads.
+        workers: Number of worker threads (default: number of CPU cores).
 
     Returns:
         Summary of replacements made.
     """
     try:
         import fnmatch
+        import os
         import re
         import shutil
+        from concurrent.futures import ThreadPoolExecutor, as_completed
         from pathlib import Path
 
         p = Path(folder_path).expanduser().resolve()
@@ -1240,92 +1310,64 @@ def search_and_replace(
                     lines.append(f"  Error reading file: {e}")
             return "\n".join(lines)
 
-        # Perform replacement
+        # Perform replacement (sequential or parallel)
         replaced_count = 0
-        for file_path in matched_files:
-            # Read content
-            content = file_path.read_text(encoding="utf-8", errors="replace")
-            # Replace all occurrences
-            new_content, num_replacements = regex.subn(replace_pattern, content)
-            if num_replacements == 0:
-                continue
-            # Create backup if requested
-            if keep_backup:
-                backup_path = file_path.with_suffix(file_path.suffix + ".bak")
-                shutil.copy2(file_path, backup_path)
-            # Write new content
-            file_path.write_text(new_content, encoding="utf-8")
-            replaced_count += 1
+        if not parallel:
+            for file_path in matched_files:
+                # Read content
+                content = file_path.read_text(encoding="utf-8", errors="replace")
+                # Replace all occurrences
+                new_content, num_replacements = regex.subn(replace_pattern, content)
+                if num_replacements == 0:
+                    continue
+                # Create backup if requested
+                if keep_backup:
+                    backup_path = file_path.with_suffix(file_path.suffix + ".bak")
+                    shutil.copy2(file_path, backup_path)
+                # Write new content
+                file_path.write_text(new_content, encoding="utf-8")
+                replaced_count += 1
+        else:
+            # Parallel processing
+            import concurrent.futures
+
+            n_workers = workers if workers is not None else os.cpu_count() or 4
+
+            def process_file(file_path):
+                # Read content
+                content = file_path.read_text(encoding="utf-8", errors="replace")
+                new_content, num_replacements = regex.subn(replace_pattern, content)
+                if num_replacements == 0:
+                    return (file_path, 0)
+                # Create backup if requested
+                if keep_backup:
+                    backup_path = file_path.with_suffix(file_path.suffix + ".bak")
+                    shutil.copy2(file_path, backup_path)
+                # Write new content
+                file_path.write_text(new_content, encoding="utf-8")
+                return (file_path, num_replacements)
+
+            with ThreadPoolExecutor(max_workers=n_workers) as executor:
+                future_to_file = {
+                    executor.submit(process_file, fp): fp for fp in matched_files
+                }
+                for future in concurrent.futures.as_completed(future_to_file):
+                    try:
+                        file_path, num = future.result()
+                        if num > 0:
+                            replaced_count += 1
+                    except Exception as e:
+                        # Log error but continue
+                        pass
 
         summary = f"Replaced pattern '{search_pattern}' with '{replace_pattern}' in {replaced_count} files."
         if keep_backup:
             summary += " Backup files (.bak) have been kept."
+        if parallel:
+            summary += f" (parallel with {n_workers if parallel else 1} workers)"
         return summary
     except Exception as e:
         return f"Error in search_and_replace: {str(e)}"
-
-
-@mcp.tool()
-def batch_format(directory: str, file_pattern: str = "*.py") -> str:
-    """
-    Format all Python files in a directory using Black.
-
-    Args:
-        directory: Path to the directory containing Python files.
-        file_pattern: File pattern to match (default "*.py").
-
-    Returns:
-        Summary of formatted files.
-    """
-    try:
-        import fnmatch
-        import subprocess
-        from pathlib import Path
-
-        p = Path(directory).expanduser().resolve()
-        if not p.exists():
-            return f"Error: Directory not found: {directory}"
-        if not p.is_dir():
-            return f"Error: Path is not a directory: {directory}"
-
-        # Collect matching files
-        files = []
-        for file in p.rglob(file_pattern):
-            if file.is_file():
-                files.append(str(file))
-
-        if not files:
-            return f"No files matching pattern '{file_pattern}' found."
-
-        formatted_count = 0
-        errors = []
-        for f in files:
-            try:
-                result = subprocess.run(
-                    ["black", f],
-                    capture_output=True,
-                    text=True,
-                    timeout=30,
-                )
-                if result.returncode == 0:
-                    formatted_count += 1
-                else:
-                    errors.append(f"{f}: {result.stderr}")
-            except subprocess.TimeoutExpired:
-                errors.append(f"{f}: Black formatting timed out.")
-            except Exception as e:
-                errors.append(f"{f}: {e}")
-
-        summary_lines = [f"Formatted {formatted_count} out of {len(files)} files."]
-        if errors:
-            summary_lines.append("\nErrors:")
-            for err in errors[:5]:  # limit error output
-                summary_lines.append(f"- {err}")
-            if len(errors) > 5:
-                summary_lines.append(f"... and {len(errors) - 5} more errors.")
-        return "\n".join(summary_lines)
-    except Exception as e:
-        return f"Error in batch_format: {str(e)}"
 
 
 @mcp.tool()

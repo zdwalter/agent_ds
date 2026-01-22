@@ -14,6 +14,7 @@ allowed-tools:
   - analyze_code_complexity
   - lint_python_file
   - generate_code
+  - code_snippet_generate
   - code_completion
   - code_style_check
   - search_and_replace

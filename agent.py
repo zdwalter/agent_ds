@@ -12,11 +12,8 @@ from typing import Any, Dict, List, Optional, cast
 from mcp import ClientSession, StdioServerParameters
 from mcp.client.stdio import stdio_client
 from openai import OpenAI, OpenAIError
-from openai.types.chat import (
-    ChatCompletionChunk,
-    ChatCompletionMessageParam,
-    ChatCompletionToolParam,
-)
+from openai.types.chat import (ChatCompletionChunk, ChatCompletionMessageParam,
+                               ChatCompletionToolParam)
 from rich.console import Console
 from rich.live import Live
 from rich.markdown import Markdown
@@ -41,6 +38,8 @@ class MCPSkillWrapper:
         self.session: Optional[ClientSession] = None
         self.tools_cache: List[Dict[str, Any]] = []
         self._description: str = ""
+        self._stdio_ctx = None
+        self._session_ctx = None
         self._load_metadata()
 
     def _load_metadata(self):
@@ -101,6 +100,16 @@ class MCPSkillWrapper:
                 "parameters": {"type": "object", "properties": {}, "required": []},
             },
         }
+
+    async def close(self):
+        """Close resources."""
+        if self._session_ctx:
+            await self._session_ctx.__aexit__(None, None, None)
+            self._session_ctx = None
+        if self._stdio_ctx:
+            await self._stdio_ctx.__aexit__(None, None, None)
+            self._stdio_ctx = None
+        self.session = None
 
 
 class DeepSeekMCPAgent:
@@ -210,14 +219,17 @@ class DeepSeekMCPAgent:
         )
 
         try:
-            read, write = await self.exit_stack.enter_async_context(
-                stdio_client(params)
-            )
-            session = await self.exit_stack.enter_async_context(
-                ClientSession(read, write)
-            )
-            await session.initialize()
+            # Manually manage context managers to ensure same task entry/exit
+            stdio_ctx = stdio_client(params)
+            read, write = await stdio_ctx.__aenter__()
+            wrapper._stdio_ctx = stdio_ctx
+
+            session_ctx = ClientSession(read, write)
+            session = await session_ctx.__aenter__()
+            wrapper._session_ctx = session_ctx
             wrapper.session = session
+
+            await session.initialize()
             console.print(f"[green]Connected to MCP skill: {wrapper.config.name}[/]")
 
             # Cache tools immediately
@@ -237,6 +249,9 @@ class DeepSeekMCPAgent:
             console.print(
                 f"[red]Failed to connect to skill {wrapper.config.name}: {e}[/]"
             )
+            # Clean up if partially initialized
+            await wrapper.close()
+            raise
 
     async def list_tools(self) -> List[Dict[str, Any]]:
         """Query tools based on loading state."""
@@ -609,6 +624,15 @@ Keep reasoning chain-of-thought light and concise, avoid overthinking. Focus on 
                 console.print(f"[red]Error: {traceback.format_exc()}[/]")
 
     async def cleanup(self):
+        # Close all skill connections
+        for skill in self.skills:
+            try:
+                await skill.close()
+            except Exception as e:
+                console.print(
+                    f"[yellow]Error closing skill {skill.config.name}: {e}[/]"
+                )
+        # Close exit stack (other resources)
         if self.jsonl_handle:
             self.jsonl_handle.close()
         await self.exit_stack.aclose()
